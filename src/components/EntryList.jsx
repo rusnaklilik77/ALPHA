@@ -1,7 +1,7 @@
 import { entryEarnings, formatDateHuman, formatEuro } from "../lib/utils";
 import { useLanguage } from "../context/LanguageContext";
 
-export default function EntryList({ entries, onEdit, onDelete, emptyMessage, readOnly = false }) {
+export default function EntryList({ entries, rate, onEdit, onDelete, emptyMessage, readOnly = false }) {
   const { t, lang } = useLanguage();
 
   if (!entries.length) {
@@ -39,7 +39,7 @@ export default function EntryList({ entries, onEdit, onDelete, emptyMessage, rea
                 {formatDateHuman(e.id, lang)}
               </div>
               <div className="text-muted text-xs sm:hidden">
-                {t.entryList.rate} {Number(e.rate).toFixed(2)} €
+                {t.entryList.rate} {Number(rate != null ? rate : e.rate).toFixed(2)} €
               </div>
             </div>
             <div className="text-accent2 font-semibold">
@@ -56,7 +56,7 @@ export default function EntryList({ entries, onEdit, onDelete, emptyMessage, rea
             </div>
             <div className="text-white font-bold">
               <span className="sm:hidden text-muted text-xs mr-1 font-normal">{t.entryList.earnings}:</span>
-              {formatEuro(entryEarnings(e))}
+              {formatEuro(entryEarnings(e, rate))}
             </div>
             {!readOnly && (
               <div className="col-span-2 sm:col-span-1 flex gap-2 justify-end">

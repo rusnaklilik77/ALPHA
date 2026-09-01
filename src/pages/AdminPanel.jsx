@@ -60,7 +60,8 @@ export default function AdminPanel({ currentUid, onClose }) {
     });
   }, [employees, query]);
 
-  const stats = useMemo(() => totals(entries), [entries]);
+  const selectedRate = selected ? Number(selected.rate ?? DEFAULT_RATE) : DEFAULT_RATE;
+  const stats = useMemo(() => totals(entries, selectedRate), [entries, selectedRate]);
 
   return (
     <div className="min-h-screen bg-bg pb-16">
@@ -201,7 +202,7 @@ export default function AdminPanel({ currentUid, onClose }) {
 
                 <div>
                   <h2 className="text-white font-bold text-lg mb-3">{t.admin.historyTitle}</h2>
-                  <EntryList entries={entries} readOnly emptyMessage={t.admin.noEntries} />
+                  <EntryList entries={entries} rate={selectedRate} readOnly emptyMessage={t.admin.noEntries} />
                 </div>
               </>
             )}

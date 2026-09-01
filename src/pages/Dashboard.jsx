@@ -21,6 +21,7 @@ import {
   listMonths,
   entriesForMonth,
   aggregateByWeekday,
+  aggregateByWeek,
   currentMonthKey,
   monthlyBreakdown,
   bestDay,
@@ -85,13 +86,19 @@ export default function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [months]);
 
+  // Везде ниже в totals/bestDay/monthlyBreakdown/aggregateByWeek передаём
+  // текущую ставку (rate) вторым аргументом — это значит, что заработок
+  // всегда считается по АКТУАЛЬНОЙ ставке из настроек, а не по той, что была
+  // сохранена в записи в момент её создания. Поменял ставку 0.70 → 0.75 —
+  // все суммы (счётчики, графики, история) пересчитываются мгновенно.
   const monthEntries = useMemo(() => entriesForMonth(entries, selectedMonth), [entries, selectedMonth]);
-  const monthTotals = useMemo(() => totals(monthEntries), [monthEntries]);
-  const allTimeTotals = useMemo(() => totals(entries), [entries]);
+  const monthTotals = useMemo(() => totals(monthEntries, rate), [monthEntries, rate]);
+  const allTimeTotals = useMemo(() => totals(entries, rate), [entries, rate]);
   const weekdayBuckets = useMemo(() => aggregateByWeekday(monthEntries), [monthEntries]);
+  const weeklyBreakdown = useMemo(() => aggregateByWeek(monthEntries, rate), [monthEntries, rate]);
   const monthLabel = formatMonthLabel(selectedMonth, lang);
-  const breakdown = useMemo(() => monthlyBreakdown(entries), [entries]);
-  const bestMonthDay = useMemo(() => bestDay(monthEntries), [monthEntries]);
+  const breakdown = useMemo(() => monthlyBreakdown(entries, rate), [entries, rate]);
+  const bestMonthDay = useMemo(() => bestDay(monthEntries, rate), [monthEntries, rate]);
   const goalPct = goal > 0 ? Math.min(100, Math.round((monthTotals.earnings / goal) * 100)) : 0;
 
   async function handleSubmit({ date, delivered, returns, tips }) {
@@ -106,7 +113,7 @@ export default function Dashboard() {
   }
 
   function handleExportCSV() {
-    exportEntriesToCSV(monthEntries, { filename: `alpha-${selectedMonth}.csv` });
+    exportEntriesToCSV(monthEntries, { filename: `alpha-${selectedMonth}.csv`, rateOverride: rate });
   }
 
   // Клик по логотипу «A ALPHA» в шапке (см. Header) всегда открывает окно
@@ -218,6 +225,11 @@ export default function Dashboard() {
         </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+          {/* Единственный накопительный счётчик в этой строке — общий заработок
+              за всё время. Остальные 4 карточки ниже показывают ТЕКУЩИЙ выбранный
+              месяц и в начале нового месяца автоматически стартуют с нуля;
+              вся история по прошлым месяцам никуда не пропадает — она доступна
+              через вкладки месяцев (MonthTabs) и окно "Общий баланс". */}
           <StatCard
             label={t.dashboard.totalAllTime}
             value={formatEuro(allTimeTotals.earnings)}
@@ -225,26 +237,26 @@ export default function Dashboard() {
             icon="💶"
           />
           <StatCard
-            label={t.dashboard.deliveredAllTime}
-            value={allTimeTotals.delivered}
+            label={t.dashboard.deliveredMonth}
+            value={monthTotals.delivered}
             valueColor="text-accent2"
             icon="📦"
           />
           <StatCard
-            label={t.dashboard.tipsAllTime}
-            value={formatEuro(allTimeTotals.tips)}
+            label={t.dashboard.tipsMonth}
+            value={formatEuro(monthTotals.tips)}
             valueColor="text-accent"
             icon="🎁"
           />
           <StatCard
-            label={t.dashboard.returnsAllTime}
-            value={allTimeTotals.returns}
+            label={t.dashboard.returnsMonth}
+            value={monthTotals.returns}
             valueColor="text-danger"
             icon="↩️"
           />
           <StatCard
             label={t.dashboard.avgPerDay}
-            value={formatEuro(allTimeTotals.days ? allTimeTotals.earnings / allTimeTotals.days : 0)}
+            value={formatEuro(monthTotals.days ? monthTotals.earnings / monthTotals.days : 0)}
             valueColor="text-accent"
             icon="📊"
           />
@@ -257,9 +269,7 @@ export default function Dashboard() {
               {t.dashboard.bestDay(monthLabel)}{" "}
               <span className="text-white font-semibold">{formatDateShort(bestMonthDay.id)}</span> —{" "}
               <span className="text-accent2 font-semibold">
-                {formatEuro(
-                  Number(bestMonthDay.delivered) * Number(bestMonthDay.rate) + Number(bestMonthDay.tips || 0)
-                )}
+                {formatEuro(Number(bestMonthDay.delivered) * Number(rate) + Number(bestMonthDay.tips || 0))}
               </span>
             </span>
           </div>
@@ -273,6 +283,40 @@ export default function Dashboard() {
         />
 
         <MonthTabs months={months} selected={selectedMonth} onSelect={setSelectedMonth} />
+
+        {/* По неделям: месяц копится постепенно — как только появляются записи
+            за очередную неделю, для неё сразу же считается своя сумма, а весь
+            блок обновляется в реальном времени по ходу месяца. */}
+        <div>
+          <h2 className="text-white font-bold text-lg mb-3">{t.dashboard.weekly.title}</h2>
+          {weeklyBreakdown.length === 0 ? (
+            <div className="bg-panel border border-border rounded-xl2 p-6 text-center text-muted text-sm">
+              {t.dashboard.charts.noData}
+            </div>
+          ) : (
+            <div className="bg-panel border border-border rounded-xl2 shadow-card overflow-hidden divide-y divide-border">
+              {weeklyBreakdown.map((w) => (
+                <div
+                  key={w.week}
+                  className="flex items-center justify-between gap-3 px-5 py-3.5 flex-wrap"
+                >
+                  <div>
+                    <div className="text-white font-semibold text-sm">
+                      {t.dashboard.weekly.week(w.week)}
+                    </div>
+                    <div className="text-muted text-xs mt-0.5">
+                      {t.dashboard.weekly.range(w.from, w.to)} · 📦{" "}
+                      <span className="text-accent2 font-semibold">{w.delivered}</span> · 🎁{" "}
+                      <span className="text-accent font-semibold">{formatEuro(w.tips)}</span> · ↩️{" "}
+                      <span className="text-danger font-semibold">{w.returns}</span>
+                    </div>
+                  </div>
+                  <div className="text-white font-bold text-base shrink-0">{formatEuro(w.earnings)}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Графики за выбранный месяц */}
         <div>
@@ -320,6 +364,7 @@ export default function Dashboard() {
           ) : (
             <EntryList
               entries={monthEntries}
+              rate={rate}
               onEdit={setEditing}
               onDelete={handleDelete}
               emptyMessage={t.dashboard.noEntriesMonth}

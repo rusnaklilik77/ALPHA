@@ -55,21 +55,27 @@ export function formatMonthLabel(key, lang = "ru") {
   return `${months[m - 1]} ${y}`;
 }
 
-export function entryEarnings(entry) {
+// rateOverride — если передана текущая ставка пользователя, заработок
+// всегда считается по НЕЙ (а не по ставке, сохранённой в самой записи).
+// Так изменение ставки в настройках сразу пересчитывает все счётчики и
+// графики «задним числом», как и просил пользователь. Если rateOverride
+// не передан (undefined/null) — используется историческая ставка записи
+// (нужно, например, для CSV-выгрузки, где важна точная ставка того дня).
+export function entryEarnings(entry, rateOverride) {
   const delivered = Number(entry.delivered) || 0;
-  const rate = Number(entry.rate) || 0;
+  const rate = rateOverride != null ? Number(rateOverride) || 0 : Number(entry.rate) || 0;
   const tips = Number(entry.tips) || 0;
   return delivered * rate + tips;
 }
 
 // Считает суммарные показатели по массиву записей
-export function totals(entries) {
+export function totals(entries, rateOverride) {
   return entries.reduce(
     (acc, e) => {
       acc.delivered += Number(e.delivered) || 0;
       acc.returns += Number(e.returns) || 0;
       acc.tips += Number(e.tips) || 0;
-      acc.earnings += entryEarnings(e);
+      acc.earnings += entryEarnings(e, rateOverride);
       acc.days += 1;
       return acc;
     },
@@ -78,14 +84,17 @@ export function totals(entries) {
 }
 
 // Лучший день по заработку среди набора записей (или null, если записей нет)
-export function bestDay(entries) {
+export function bestDay(entries, rateOverride) {
   if (!entries.length) return null;
-  return entries.reduce((best, e) => (entryEarnings(e) > entryEarnings(best) ? e : best), entries[0]);
+  return entries.reduce(
+    (best, e) => (entryEarnings(e, rateOverride) > entryEarnings(best, rateOverride) ? e : best),
+    entries[0]
+  );
 }
 
 // Сводка заработка по всем месяцам, отсортированная от новых к старым.
 // Используется во всплывающем окне "Общий баланс".
-export function monthlyBreakdown(entries) {
+export function monthlyBreakdown(entries, rateOverride) {
   const map = new Map();
   for (const e of entries) {
     const key = monthKey(e.id);
@@ -96,10 +105,35 @@ export function monthlyBreakdown(entries) {
     bucket.delivered += Number(e.delivered) || 0;
     bucket.returns += Number(e.returns) || 0;
     bucket.tips += Number(e.tips) || 0;
-    bucket.earnings += entryEarnings(e);
+    bucket.earnings += entryEarnings(e, rateOverride);
     bucket.days += 1;
   }
   return Array.from(map.values()).sort((a, b) => (a.key < b.key ? 1 : -1));
+}
+
+// Разбивает записи ВНУТРИ ОДНОГО месяца на недели (1-7, 8-14, 15-21, 22-28, 29-31)
+// и считает показатели по каждой неделе. Так как считается прямо из живых
+// entries, результат сам обновляется по ходу месяца — как только добавляется
+// запись за очередную неделю, она сразу попадает в свой бакет и месячная
+// картина складывается постепенно, неделя за неделей.
+export function aggregateByWeek(entries, rateOverride) {
+  const map = new Map();
+  for (const e of entries) {
+    const day = Number(e.id.slice(8, 10));
+    const week = Math.ceil(day / 7);
+    if (!map.has(week)) {
+      map.set(week, { week, from: day, to: day, delivered: 0, returns: 0, tips: 0, earnings: 0, days: 0 });
+    }
+    const bucket = map.get(week);
+    bucket.from = Math.min(bucket.from, day);
+    bucket.to = Math.max(bucket.to, day);
+    bucket.delivered += Number(e.delivered) || 0;
+    bucket.returns += Number(e.returns) || 0;
+    bucket.tips += Number(e.tips) || 0;
+    bucket.earnings += entryEarnings(e, rateOverride);
+    bucket.days += 1;
+  }
+  return Array.from(map.values()).sort((a, b) => a.week - b.week);
 }
 
 export function entriesThisMonth(entries) {
@@ -122,7 +156,7 @@ export function listMonths(entries) {
 }
 
 // Выгружает записи в CSV-файл и запускает скачивание в браузере.
-export function exportEntriesToCSV(entries, { filename = "alpha-history.csv", headers } = {}) {
+export function exportEntriesToCSV(entries, { filename = "alpha-history.csv", headers, rateOverride } = {}) {
   const cols = headers || ["date", "delivered", "returns", "tips", "rate", "earnings"];
   const sorted = [...entries].sort((a, b) => (a.id < b.id ? -1 : 1));
   const lines = [cols.join(";")];
@@ -133,8 +167,8 @@ export function exportEntriesToCSV(entries, { filename = "alpha-history.csv", he
         Number(e.delivered) || 0,
         Number(e.returns) || 0,
         (Number(e.tips) || 0).toFixed(2),
-        Number(e.rate).toFixed(2),
-        entryEarnings(e).toFixed(2),
+        (rateOverride != null ? Number(rateOverride) : Number(e.rate)).toFixed(2),
+        entryEarnings(e, rateOverride).toFixed(2),
       ].join(";")
     );
   }

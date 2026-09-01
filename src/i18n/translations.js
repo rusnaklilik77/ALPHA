@@ -97,10 +97,10 @@ export const dict = {
       returns: "возвратов",
       workDays: "рабочих дней",
       totalAllTime: "Всего за всё время",
-      deliveredAllTime: "Посылок отдано всего",
-      tipsAllTime: "Чаевые всего",
+      deliveredMonth: "Посылок за месяц",
+      tipsMonth: "Чаевые за месяц",
       tipsAllTimeTitle: "Общий счётчик чаевых за всё время",
-      returnsAllTime: "Возвратов всего",
+      returnsMonth: "Возвратов за месяц",
       avgPerDay: "Средний заработок / день",
       goalProgress: (goal) => `Цель на месяц: ${goal}`,
       editGoal: "Изменить",
@@ -114,6 +114,11 @@ export const dict = {
       deleteConfirm: (date) => `Удалить запись за ${date}?`,
       monthsTitle: "Месяцы",
       currentBadge: "текущий",
+      weekly: {
+        title: "По неделям",
+        week: (n) => `Неделя ${n}`,
+        range: (from, to) => (from === to ? `день ${from}` : `${from}–${to} числа`),
+      },
       charts: {
         title: "Графики",
         deliveredTrend: "Динамика посылок по дням",
@@ -154,7 +159,7 @@ export const dict = {
     rateModal: {
       title: "Ставка за посылку",
       description:
-        "Если тебе подняли (или снизили) оплату за посылку — обнови значение здесь. Новая ставка будет применяться к записям, которые ты добавишь после изменения.",
+        "Если тебе подняли (или снизили) оплату за посылку — обнови значение здесь. Новая ставка применится сразу ко всем счётчикам и графикам, включая уже внесённые записи.",
       label: "Ставка, €",
       cancel: "Отмена",
       save: "Сохранить",
@@ -266,10 +271,10 @@ export const dict = {
       returns: "retururi",
       workDays: "zile lucrate",
       totalAllTime: "Total din totdeauna",
-      deliveredAllTime: "Colete livrate în total",
-      tipsAllTime: "Bacșiș total",
+      deliveredMonth: "Colete livrate luna aceasta",
+      tipsMonth: "Bacșiș luna aceasta",
       tipsAllTimeTitle: "Contor general de bacșiș din totdeauna",
-      returnsAllTime: "Retururi în total",
+      returnsMonth: "Retururi luna aceasta",
       avgPerDay: "Câștig mediu / zi",
       goalProgress: (goal) => `Obiectiv lunar: ${goal}`,
       editGoal: "Editează",
@@ -283,6 +288,11 @@ export const dict = {
       deleteConfirm: (date) => `Ștergi înregistrarea din ${date}?`,
       monthsTitle: "Luni",
       currentBadge: "curentă",
+      weekly: {
+        title: "Pe săptămâni",
+        week: (n) => `Săptămâna ${n}`,
+        range: (from, to) => (from === to ? `ziua ${from}` : `${from}–${to}`),
+      },
       charts: {
         title: "Grafice",
         deliveredTrend: "Evoluția coletelor pe zile",
@@ -323,7 +333,7 @@ export const dict = {
     rateModal: {
       title: "Tarif per colet",
       description:
-        "Dacă ți s-a mărit (sau micșorat) plata per colet — actualizează valoarea aici. Noul tarif se va aplica înregistrărilor adăugate după schimbare.",
+        "Dacă ți s-a mărit (sau micșorat) plata per colet — actualizează valoarea aici. Noul tarif se aplică imediat tuturor contoarelor și graficelor, inclusiv înregistrărilor deja adăugate.",
       label: "Tarif, €",
       cancel: "Anulează",
       save: "Salvează",
@@ -435,10 +445,10 @@ export const dict = {
       returns: "returns",
       workDays: "work days",
       totalAllTime: "Total all-time",
-      deliveredAllTime: "Parcels delivered total",
-      tipsAllTime: "Tips total",
+      deliveredMonth: "Parcels this month",
+      tipsMonth: "Tips this month",
       tipsAllTimeTitle: "Overall tips counter, all-time",
-      returnsAllTime: "Returns total",
+      returnsMonth: "Returns this month",
       avgPerDay: "Average earnings / day",
       goalProgress: (goal) => `Monthly goal: ${goal}`,
       editGoal: "Edit",
@@ -452,6 +462,11 @@ export const dict = {
       deleteConfirm: (date) => `Delete the entry for ${date}?`,
       monthsTitle: "Months",
       currentBadge: "current",
+      weekly: {
+        title: "By week",
+        week: (n) => `Week ${n}`,
+        range: (from, to) => (from === to ? `day ${from}` : `${from}–${to}`),
+      },
       charts: {
         title: "Charts",
         deliveredTrend: "Parcels over time",
@@ -492,7 +507,7 @@ export const dict = {
     rateModal: {
       title: "Rate per parcel",
       description:
-        "If your pay per parcel went up (or down), update it here. The new rate will apply to entries you add after the change.",
+        "If your pay per parcel went up (or down), update it here. The new rate applies instantly to all counters and charts, including entries you already added.",
       label: "Rate, €",
       cancel: "Cancel",
       save: "Save",
