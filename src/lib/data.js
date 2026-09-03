@@ -6,10 +6,12 @@ import {
   collection,
   deleteDoc,
   serverTimestamp,
+  increment,
 } from "firebase/firestore";
 import { db } from "../firebase";
 
 export const DEFAULT_RATE = 0.7; // € за посылку по умолчанию
+export const DEFAULT_ROLE = "privat"; // privat | shop
 
 // Логин/пароль администратора проверяются локально, прямо в коде — без
 // отдельного аккаунта в Firebase Auth. Это проще в настройке, но значит,
@@ -41,9 +43,9 @@ export function subscribeUserSettings(uid, callback) {
   const ref = doc(db, "users", uid);
   return onSnapshot(ref, (snap) => {
     if (snap.exists()) {
-      callback(snap.data());
+      callback({ role: DEFAULT_ROLE, ...snap.data() });
     } else {
-      callback({ rate: DEFAULT_RATE, goal: 0 });
+      callback({ rate: DEFAULT_RATE, goal: 0, role: DEFAULT_ROLE });
     }
   });
 }
@@ -147,4 +149,67 @@ export function subscribeEntriesAdmin(uid, callback) {
     entries.sort((a, b) => (a.id < b.id ? 1 : -1));
     callback(entries);
   });
+}
+
+// ---------- Сканер посылок (QR-код + физический сканер штрихкодов) ----------
+// Идея: у каждого сотрудника есть секретный "scanToken" в его документе
+// users/{uid}. QR-код в приложении кодирует ссылку вида
+// "<сайт>?scan=<uid>&t=<token>". Открыв эту ссылку на телефоне или
+// устройстве со сканером штрихкодов, сотрудник попадает на отдельную
+// страницу-компаньон (ScanPage), которая может добавлять +1 к
+// доставленным/возвратам за сегодня БЕЗ полноценного входа по
+// email/паролю — доступ и запись разрешены только тому, кто знает
+// правильную пару uid+token (см. firestore.rules). Смена ("Обновить код")
+// мгновенно делает старый QR нерабочим.
+
+export function generateScanToken() {
+  const bytes = new Uint8Array(16);
+  (window.crypto || window.msCrypto).getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+// Возвращает текущий scanToken пользователя, создавая новый, если его ещё нет.
+export async function ensureScanToken(uid, existingToken) {
+  if (existingToken) return existingToken;
+  const token = generateScanToken();
+  await setDoc(doc(db, "users", uid), { scanToken: token }, { merge: true });
+  return token;
+}
+
+// Полностью заменяет токен — старый QR-код перестаёт работать.
+export async function regenerateScanToken(uid) {
+  const token = generateScanToken();
+  await setDoc(doc(db, "users", uid), { scanToken: token }, { merge: true });
+  return token;
+}
+
+// Читает публично доступную часть документа сотрудника по uid — используется
+// страницей сканера (ScanPage), где пользователь ещё не вошёл в систему.
+// Разрешено правилами Firestore только для документов, у которых уже
+// установлен scanToken (см. firestore.rules).
+export async function fetchScanUser(uid) {
+  const ref = doc(db, "users", uid);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return null;
+  return { uid, ...snap.data() };
+}
+
+// Добавляет +1 к полю "delivered" или "returns" в записи за сегодняшний
+// день, используя атомарный increment() — так странице сканера не нужно
+// сначала читать текущее значение. Поле scanToken пишется вместе с
+// остальными данными и служит доказательством для правила Firestore, что
+// запрос пришёл от владельца верного QR-кода (см. firestore.rules).
+export async function scanIncrement(uid, token, dateStr, field, rate) {
+  const ref = doc(db, "users", uid, "entries", dateStr);
+  await setDoc(
+    ref,
+    {
+      date: dateStr,
+      [field]: increment(1),
+      rate: Number(rate) || DEFAULT_RATE,
+      scanToken: token,
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  );
 }

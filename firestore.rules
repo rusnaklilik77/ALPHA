@@ -18,7 +18,16 @@ service cloud.firestore {
     match /users/{userId} {
       // Читать документ можно себе — всегда, а администратору — любой
       // (это же правило действует и на запрос списка всех сотрудников).
-      allow read: if request.auth != null && (request.auth.uid == userId || isAdmin());
+      // Дополнительно: документ с уже включённым сканером (в нём есть
+      // поле scanToken) можно прочитать и без входа в систему — это
+      // нужно странице-компаньону сканера (ScanPage), которая открывается
+      // по QR-коду на отдельном устройстве без email/пароля. Настоящий
+      // "замок" здесь — сам секретный scanToken: без него узнать uid
+      // недостаточно, чтобы что-то изменить (см. правило записи в
+      // entries ниже). Это тот же компромисс "простота вместо серверной
+      // роли", что и у остального проекта (см. isAdmin() выше).
+      allow read: if (request.auth != null && (request.auth.uid == userId || isAdmin()))
+        || (resource.data.scanToken is string);
       // Изменять свой документ может только сам пользователь.
       allow write: if request.auth != null && request.auth.uid == userId;
 
@@ -26,9 +35,15 @@ service cloud.firestore {
         // Свои записи о доставках видит владелец, чужие — только админ
         // (для экрана статистики сотрудника).
         allow read: if request.auth != null && (request.auth.uid == userId || isAdmin());
-        // Редактировать/удалять записи можно только у себя — админ видит
-        // чужую статистику, но не может её менять.
-        allow write: if request.auth != null && request.auth.uid == userId;
+        // Редактировать/удалять записи можно у себя, либо со страницы
+        // сканера — но только если в самой записи передан scanToken,
+        // совпадающий с тем, что хранится в users/{userId}.scanToken.
+        // get() внутри правила не требует отдельного разрешения на
+        // чтение — это стандартный приём Firestore Rules.
+        allow write: if (request.auth != null && request.auth.uid == userId)
+          || (request.resource.data.scanToken is string
+              && request.resource.data.scanToken
+                == get(/databases/$(database)/documents/users/$(userId)).data.scanToken);
       }
     }
   }

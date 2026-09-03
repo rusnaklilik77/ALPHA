@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { todayStr } from "../lib/utils";
 import { useLanguage } from "../context/LanguageContext";
 
-export default function EntryForm({ rate, onSubmit, existing, onCancel }) {
+export default function EntryForm({ rate, role = "privat", onSubmit, existing, onCancel }) {
   const { t } = useLanguage();
   const [date, setDate] = useState(existing?.id || todayStr());
   const [delivered, setDelivered] = useState(existing?.delivered ?? "");
@@ -59,7 +59,7 @@ export default function EntryForm({ rate, onSubmit, existing, onCancel }) {
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-muted mb-1.5">{t.entryForm.delivered}</label>
+          <label className="block text-xs font-medium text-muted mb-1.5">{t.entryForm.deliveredLabel(role)}</label>
           <input
             type="number"
             min="0"
@@ -85,7 +85,7 @@ export default function EntryForm({ rate, onSubmit, existing, onCancel }) {
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-muted mb-1.5">{t.entryForm.returns}</label>
+          <label className="block text-xs font-medium text-muted mb-1.5">{t.entryForm.returnsLabel(role)}</label>
           <input
             type="number"
             min="0"

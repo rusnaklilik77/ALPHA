@@ -35,6 +35,7 @@ import RateModal from "../components/RateModal";
 import GoalModal from "../components/GoalModal";
 import BalanceModal from "../components/BalanceModal";
 import AdminLoginModal from "../components/AdminLoginModal";
+import ScannerModal from "../components/ScannerModal";
 import MonthTabs from "../components/MonthTabs";
 import { TrendChart, WeekdayBarChart } from "../components/Charts";
 import AdminPanel from "./AdminPanel";
@@ -45,6 +46,8 @@ export default function Dashboard() {
   const [rate, setRate] = useState(DEFAULT_RATE);
   const [goal, setGoal] = useState(0);
   const [employeeId, setEmployeeId] = useState("");
+  const [role, setRole] = useState("privat");
+  const [scanToken, setScanToken] = useState("");
   const [adminOpen, setAdminOpen] = useState(false);
   const [adminLoginOpen, setAdminLoginOpen] = useState(false);
   const [entries, setEntries] = useState([]);
@@ -53,6 +56,7 @@ export default function Dashboard() {
   const [rateModalOpen, setRateModalOpen] = useState(false);
   const [goalModalOpen, setGoalModalOpen] = useState(false);
   const [balanceModalOpen, setBalanceModalOpen] = useState(false);
+  const [scannerModalOpen, setScannerModalOpen] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState(currentMonthKey());
 
   useEffect(() => {
@@ -62,6 +66,8 @@ export default function Dashboard() {
       setRate(data.rate ?? DEFAULT_RATE);
       setGoal(data.goal ?? 0);
       setEmployeeId(data.employeeId ?? "");
+      setRole(data.role === "shop" ? "shop" : "privat");
+      setScanToken(data.scanToken ?? "");
     });
     const unsubEntries = subscribeEntries(user.uid, (data) => {
       setEntries(data);
@@ -142,6 +148,7 @@ export default function Dashboard() {
         rate={rate}
         onOpenRate={() => setRateModalOpen(true)}
         onOpenBalance={() => setBalanceModalOpen(true)}
+        onOpenScanner={() => setScannerModalOpen(true)}
         onLogout={logout}
         onLogoClick={handleLogoClick}
       />
@@ -176,7 +183,7 @@ export default function Dashboard() {
           <div className="flex flex-wrap gap-x-6 gap-y-1 mt-4 text-sm text-muted">
             <span>
               📦 <span className="text-accent2 font-semibold">{monthTotals.delivered}</span>{" "}
-              {t.dashboard.delivered}
+              {t.dashboard.deliveredLabel(role)}
             </span>
             <span>
               🎁 <span className="text-accent font-semibold">{formatEuro(monthTotals.tips)}</span>{" "}
@@ -184,7 +191,7 @@ export default function Dashboard() {
             </span>
             <span>
               ↩️ <span className="text-danger font-semibold">{monthTotals.returns}</span>{" "}
-              {t.dashboard.returns}
+              {t.dashboard.returnsLabel(role)}
             </span>
             <span>
               📅 <span className="text-white font-semibold">{monthTotals.days}</span>{" "}
@@ -277,6 +284,7 @@ export default function Dashboard() {
 
         <EntryForm
           rate={rate}
+          role={role}
           onSubmit={handleSubmit}
           existing={editing}
           onCancel={() => setEditing(null)}
@@ -365,6 +373,7 @@ export default function Dashboard() {
             <EntryList
               entries={monthEntries}
               rate={rate}
+              role={role}
               onEdit={setEditing}
               onDelete={handleDelete}
               emptyMessage={t.dashboard.noEntriesMonth}
@@ -393,7 +402,16 @@ export default function Dashboard() {
         <BalanceModal
           breakdown={breakdown}
           grandTotal={allTimeTotals}
+          role={role}
           onClose={() => setBalanceModalOpen(false)}
+        />
+      )}
+
+      {scannerModalOpen && (
+        <ScannerModal
+          uid={user.uid}
+          scanToken={scanToken}
+          onClose={() => setScannerModalOpen(false)}
         />
       )}
     </div>

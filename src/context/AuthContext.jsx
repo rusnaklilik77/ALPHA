@@ -23,18 +23,19 @@ export function AuthProvider({ children }) {
     return unsub;
   }, []);
 
-  async function register(name, email, password, employeeId) {
+  async function register(name, email, password, employeeId, role) {
     const cred = await createUserWithEmailAndPassword(auth, email, password);
     if (name) {
       await updateProfile(cred.user, { displayName: name });
     }
-    // Имя и идентификационный номер сохраняем ещё и в Firestore (не только
-    // в профиле Auth), потому что список сотрудников в режиме админа
-    // строится из документов users/* — профиль Auth других людей клиенту
-    // недоступен.
+    // Имя, идентификационный номер и функция на работе (курьер приват /
+    // курьер шоп) сохраняются ещё и в Firestore (не только в профиле
+    // Auth), потому что список сотрудников в режиме админа строится из
+    // документов users/* — профиль Auth других людей клиенту недоступен.
     await ensureUserDoc(cred.user.uid, {
       name: name || "",
       employeeId: (employeeId || "").trim(),
+      role: role === "shop" ? "shop" : "privat",
     });
     return cred.user;
   }

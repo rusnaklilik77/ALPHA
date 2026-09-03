@@ -3,7 +3,7 @@ import { useLanguage } from "../context/LanguageContext";
 
 // Всплывающее окно "Общий баланс" — сводка заработка по всем месяцам сразу,
 // плюс общий итог за всё время наверху.
-export default function BalanceModal({ breakdown, grandTotal, onClose }) {
+export default function BalanceModal({ breakdown, grandTotal, role = "privat", onClose }) {
   const { t, lang } = useLanguage();
 
   return (
@@ -31,7 +31,7 @@ export default function BalanceModal({ breakdown, grandTotal, onClose }) {
           <div className="flex flex-wrap gap-x-5 gap-y-1 mt-3 text-sm text-muted">
             <span>
               📦 <span className="text-accent2 font-semibold">{grandTotal.delivered}</span>{" "}
-              {t.dashboard.delivered}
+              {t.dashboard.deliveredLabel(role)}
             </span>
             <span>
               🎁 <span className="text-accent font-semibold">{formatEuro(grandTotal.tips)}</span>{" "}

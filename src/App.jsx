@@ -3,6 +3,18 @@ import { LanguageProvider, useLanguage } from "./context/LanguageContext";
 import { isFirebaseConfigured } from "./firebase";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
+import ScanPage from "./pages/ScanPage";
+
+// Страница сканера открывается по ссылке из QR-кода ("?scan=<uid>&t=<token>")
+// и не требует входа по email/паролю — проверяем параметры адресной строки
+// до того, как решаем, что рендерить (Auth/Dashboard или ScanPage).
+function getScanParams() {
+  const params = new URLSearchParams(window.location.search);
+  const uid = params.get("scan");
+  const token = params.get("t");
+  if (!uid || !token) return null;
+  return { uid, token };
+}
 
 const REQUIRED_ENV_VARS = [
   "VITE_FIREBASE_API_KEY",
@@ -57,9 +69,13 @@ function Gate() {
 }
 
 export default function App() {
+  const scanParams = getScanParams();
+
   return (
     <LanguageProvider>
-      {isFirebaseConfigured ? (
+      {scanParams ? (
+        <ScanPage uid={scanParams.uid} token={scanParams.token} />
+      ) : isFirebaseConfigured ? (
         <AuthProvider>
           <Gate />
         </AuthProvider>

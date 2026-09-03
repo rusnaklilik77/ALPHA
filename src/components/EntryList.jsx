@@ -1,7 +1,7 @@
 import { entryEarnings, formatDateHuman, formatEuro } from "../lib/utils";
 import { useLanguage } from "../context/LanguageContext";
 
-export default function EntryList({ entries, rate, onEdit, onDelete, emptyMessage, readOnly = false }) {
+export default function EntryList({ entries, rate, role = "privat", onEdit, onDelete, emptyMessage, readOnly = false }) {
   const { t, lang } = useLanguage();
 
   if (!entries.length) {
@@ -20,8 +20,8 @@ export default function EntryList({ entries, rate, onEdit, onDelete, emptyMessag
         }`}
       >
         <span>{t.entryList.date}</span>
-        <span>{t.entryList.delivered}</span>
-        <span>{t.entryList.returns}</span>
+        <span>{t.entryList.deliveredLabel(role)}</span>
+        <span>{t.entryList.returnsLabel(role)}</span>
         <span>{t.entryList.tips}</span>
         <span>{t.entryList.earnings}</span>
         {!readOnly && <span></span>}

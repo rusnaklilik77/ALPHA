@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useLanguage } from "../context/LanguageContext";
+import PasswordInput from "./PasswordInput";
 import lionLogo from "../assets/lion-logo.png";
 
 // Всплывающее окно, которое открывается по клику на логотип «A ALPHA» в
@@ -66,13 +67,11 @@ export default function AdminLoginModal({ onLogin, onClose }) {
           <label className="block text-xs font-medium text-muted mb-1.5">
             {t.adminLogin.password}
           </label>
-          <input
-            type="password"
-            autoComplete="current-password"
-            required
+          <PasswordInput
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full bg-panel2 border border-border rounded-lg px-3 py-2.5 text-white outline-none focus:border-accent transition"
+            autoComplete="current-password"
+            required
           />
 
           {error && <p className="text-danger text-xs mt-3">{error}</p>}

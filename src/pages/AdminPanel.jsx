@@ -1,9 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLanguage } from "../context/LanguageContext";
-import { subscribeAllUsersAdmin, subscribeEntriesAdmin, adminLogout, DEFAULT_RATE } from "../lib/data";
-import { totals, formatEuro } from "../lib/utils";
+import { subscribeAllUsersAdmin, subscribeEntriesAdmin, adminLogout, DEFAULT_RATE, DEFAULT_ROLE } from "../lib/data";
+import {
+  totals,
+  formatEuro,
+  formatMonthLabel,
+  listMonths,
+  entriesForMonth,
+  currentMonthKey,
+  monthlyBreakdown,
+} from "../lib/utils";
 import StatCard from "../components/StatCard";
 import EntryList from "../components/EntryList";
+import MonthTabs from "../components/MonthTabs";
 import { TrendChart } from "../components/Charts";
 
 // Режим администратора: список всех зарегистрированных сотрудников (по
@@ -14,13 +23,14 @@ import { TrendChart } from "../components/Charts";
 // правилами Firestore (см. firestore.rules), этот компонент просто
 // отображает то, что сервер согласился отдать.
 export default function AdminPanel({ currentUid, onClose }) {
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
   const [employees, setEmployees] = useState([]);
   const [loadingList, setLoadingList] = useState(true);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(null);
   const [entries, setEntries] = useState([]);
   const [loadingEntries, setLoadingEntries] = useState(false);
+  const [selectedMonth, setSelectedMonth] = useState(currentMonthKey());
 
   useEffect(() => {
     const unsub = subscribeAllUsersAdmin((list) => {
@@ -36,6 +46,7 @@ export default function AdminPanel({ currentUid, onClose }) {
       return;
     }
     setLoadingEntries(true);
+    setSelectedMonth(currentMonthKey());
     const unsub = subscribeEntriesAdmin(selected.uid, (data) => {
       setEntries(data);
       setLoadingEntries(false);
@@ -61,7 +72,24 @@ export default function AdminPanel({ currentUid, onClose }) {
   }, [employees, query]);
 
   const selectedRate = selected ? Number(selected.rate ?? DEFAULT_RATE) : DEFAULT_RATE;
-  const stats = useMemo(() => totals(entries, selectedRate), [entries, selectedRate]);
+  const selectedRole = selected ? (selected.role === "shop" ? "shop" : DEFAULT_ROLE) : DEFAULT_ROLE;
+
+  // Список месяцев, за которые у сотрудника есть записи (плюс текущий) — та же
+  // логика, что и в обычном дашборде, теперь доступна и админу: можно
+  // переключаться по вкладкам (август, сентябрь и т.д.) и видеть данные
+  // именно за выбранный месяц, а не только суммарно за всё время.
+  const months = useMemo(() => listMonths(entries), [entries]);
+  useEffect(() => {
+    if (!months.includes(selectedMonth)) {
+      setSelectedMonth(currentMonthKey());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [months]);
+  const monthEntries = useMemo(() => entriesForMonth(entries, selectedMonth), [entries, selectedMonth]);
+  const monthLabel = formatMonthLabel(selectedMonth, lang);
+  const monthStats = useMemo(() => totals(monthEntries, selectedRate), [monthEntries, selectedRate]);
+  const allTimeStats = useMemo(() => totals(entries, selectedRate), [entries, selectedRate]);
+  const breakdown = useMemo(() => monthlyBreakdown(entries, selectedRate), [entries, selectedRate]);
 
   return (
     <div className="min-h-screen bg-bg pb-16">
@@ -139,8 +167,11 @@ export default function AdminPanel({ currentUid, onClose }) {
 
             <div className="bg-panel border border-border rounded-xl2 shadow-card p-6 flex items-center justify-between gap-3 flex-wrap">
               <div>
-                <div className="text-white font-bold text-lg">
+                <div className="text-white font-bold text-lg flex items-center gap-2 flex-wrap">
                   {selected.name || t.admin.unnamed}
+                  <span className="text-[10px] font-semibold uppercase tracking-wide bg-accent/15 border border-accent/30 text-accent rounded-full px-2 py-0.5">
+                    {t.admin.roleLabel(selectedRole)}
+                  </span>
                 </div>
                 <div className="text-muted text-sm">
                   {t.admin.idLabel}: {selected.employeeId || "—"}
@@ -160,34 +191,107 @@ export default function AdminPanel({ currentUid, onClose }) {
               </div>
             ) : (
               <>
+                {/* Общий итог за всё время — не зависит от выбранной вкладки месяца ниже */}
+                <div>
+                  <h2 className="text-white font-bold text-lg mb-3">{t.admin.allTime}</h2>
+                  <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+                    <StatCard
+                      label={t.admin.earnings}
+                      value={formatEuro(allTimeStats.earnings)}
+                      valueColor="text-white"
+                      icon="💶"
+                    />
+                    <StatCard
+                      label={t.admin.delivered}
+                      value={allTimeStats.delivered}
+                      valueColor="text-accent2"
+                      icon="📦"
+                    />
+                    <StatCard
+                      label={t.admin.returns}
+                      value={allTimeStats.returns}
+                      valueColor="text-danger"
+                      icon="↩️"
+                    />
+                    <StatCard
+                      label={t.admin.tips}
+                      value={formatEuro(allTimeStats.tips)}
+                      valueColor="text-accent"
+                      icon="🎁"
+                    />
+                    <StatCard
+                      label={t.admin.workDays}
+                      value={allTimeStats.days}
+                      valueColor="text-white"
+                      icon="📅"
+                    />
+                  </div>
+                </div>
+
+                {/* Разбивка по месяцам — теперь доступна и админу, точно так же,
+                    как окно "Общий баланс" у самого сотрудника: август, сентябрь
+                    и так далее видны отдельными строками и никуда не пропадают. */}
+                <div>
+                  <div className="text-xs uppercase tracking-wide text-muted font-medium mb-2">
+                    {t.admin.monthlyTitle}
+                  </div>
+                  <div className="bg-panel border border-border rounded-xl2 shadow-card overflow-hidden divide-y divide-border">
+                    {breakdown.length === 0 ? (
+                      <div className="text-muted text-sm text-center py-6">{t.balanceModal.empty}</div>
+                    ) : (
+                      breakdown.map((m) => (
+                        <div
+                          key={m.key}
+                          className="flex items-center justify-between gap-3 px-5 py-3.5 flex-wrap"
+                        >
+                          <div>
+                            <div className="text-white font-semibold text-sm">
+                              {formatMonthLabel(m.key, lang)}
+                            </div>
+                            <div className="text-muted text-xs mt-0.5">
+                              📦 <span className="text-accent2 font-semibold">{m.delivered}</span> · 🎁{" "}
+                              <span className="text-accent font-semibold">{formatEuro(m.tips)}</span> · ↩️{" "}
+                              <span className="text-danger font-semibold">{m.returns}</span> · 📅{" "}
+                              <span className="text-white font-semibold">{m.days}</span>
+                            </div>
+                          </div>
+                          <div className="text-white font-bold text-base shrink-0">{formatEuro(m.earnings)}</div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                <MonthTabs months={months} selected={selectedMonth} onSelect={setSelectedMonth} />
+
                 <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
                   <StatCard
                     label={t.admin.earnings}
-                    value={formatEuro(stats.earnings)}
+                    value={formatEuro(monthStats.earnings)}
                     valueColor="text-white"
                     icon="💶"
                   />
                   <StatCard
                     label={t.admin.delivered}
-                    value={stats.delivered}
+                    value={monthStats.delivered}
                     valueColor="text-accent2"
                     icon="📦"
                   />
                   <StatCard
                     label={t.admin.returns}
-                    value={stats.returns}
+                    value={monthStats.returns}
                     valueColor="text-danger"
                     icon="↩️"
                   />
                   <StatCard
                     label={t.admin.tips}
-                    value={formatEuro(stats.tips)}
+                    value={formatEuro(monthStats.tips)}
                     valueColor="text-accent"
                     icon="🎁"
                   />
                   <StatCard
                     label={t.admin.workDays}
-                    value={stats.days}
+                    value={monthStats.days}
                     valueColor="text-white"
                     icon="📅"
                   />
@@ -197,12 +301,20 @@ export default function AdminPanel({ currentUid, onClose }) {
                   <h4 className="text-white font-semibold text-sm mb-2">
                     {t.dashboard.charts.deliveredTrend}
                   </h4>
-                  <TrendChart entries={entries} />
+                  <TrendChart entries={monthEntries} />
                 </div>
 
                 <div>
-                  <h2 className="text-white font-bold text-lg mb-3">{t.admin.historyTitle}</h2>
-                  <EntryList entries={entries} rate={selectedRate} readOnly emptyMessage={t.admin.noEntries} />
+                  <h2 className="text-white font-bold text-lg mb-3">
+                    {t.admin.historyTitle} — {monthLabel}
+                  </h2>
+                  <EntryList
+                    entries={monthEntries}
+                    rate={selectedRate}
+                    role={selectedRole}
+                    readOnly
+                    emptyMessage={t.admin.noEntries}
+                  />
                 </div>
               </>
             )}
