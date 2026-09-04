@@ -2,7 +2,18 @@ import { useEffect, useRef, useState } from "react";
 import { useLanguage } from "../context/LanguageContext";
 import lionLogo from "../assets/lion-logo.png";
 
-export default function Header({ userName, rate, onOpenRate, onOpenBalance, onOpenScanner, onLogout, onLogoClick }) {
+export default function Header({
+  userName,
+  rate,
+  role = "privat",
+  monthlyPayAmount = 0,
+  onOpenRate,
+  onOpenMonthlyPay,
+  onOpenBalance,
+  onOpenScanner,
+  onLogout,
+  onLogoClick,
+}) {
   const { t, lang, setLang, langs } = useLanguage();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef(null);
@@ -79,13 +90,23 @@ export default function Header({ userName, rate, onOpenRate, onOpenBalance, onOp
           >
             {t.header.balance}
           </button>
-          <button
-            onClick={onOpenRate}
-            className="text-xs sm:text-sm font-semibold bg-panel2 hover:bg-panel border border-border rounded-lg px-3 py-2 text-white transition"
-            title={t.header.rateTitle}
-          >
-            {t.header.rate(Number(rate).toFixed(2))}
-          </button>
+          {role === "shop" ? (
+            <button
+              onClick={onOpenMonthlyPay}
+              className="text-xs sm:text-sm font-semibold bg-panel2 hover:bg-panel border border-border rounded-lg px-3 py-2 text-white transition"
+              title={t.header.monthlyPayTitle}
+            >
+              {t.header.monthlyPay(monthlyPayAmount)}
+            </button>
+          ) : (
+            <button
+              onClick={onOpenRate}
+              className="text-xs sm:text-sm font-semibold bg-panel2 hover:bg-panel border border-border rounded-lg px-3 py-2 text-white transition"
+              title={t.header.rateTitle}
+            >
+              {t.header.rate(Number(rate).toFixed(2))}
+            </button>
+          )}
           {onOpenScanner && (
             <button
               onClick={onOpenScanner}
@@ -154,16 +175,29 @@ export default function Header({ userName, rate, onOpenRate, onOpenBalance, onOp
             >
               {t.header.balance}
             </button>
-            <button
-              onClick={() => {
-                onOpenRate();
-                setMenuOpen(false);
-              }}
-              className="w-full text-left text-sm font-semibold bg-panel2 hover:bg-panel border border-border rounded-lg px-3 py-2.5 text-white transition"
-              title={t.header.rateTitle}
-            >
-              {t.header.rate(Number(rate).toFixed(2))}
-            </button>
+            {role === "shop" ? (
+              <button
+                onClick={() => {
+                  onOpenMonthlyPay();
+                  setMenuOpen(false);
+                }}
+                className="w-full text-left text-sm font-semibold bg-panel2 hover:bg-panel border border-border rounded-lg px-3 py-2.5 text-white transition"
+                title={t.header.monthlyPayTitle}
+              >
+                {t.header.monthlyPay(monthlyPayAmount)}
+              </button>
+            ) : (
+              <button
+                onClick={() => {
+                  onOpenRate();
+                  setMenuOpen(false);
+                }}
+                className="w-full text-left text-sm font-semibold bg-panel2 hover:bg-panel border border-border rounded-lg px-3 py-2.5 text-white transition"
+                title={t.header.rateTitle}
+              >
+                {t.header.rate(Number(rate).toFixed(2))}
+              </button>
+            )}
             {onOpenScanner && (
               <button
                 onClick={() => {

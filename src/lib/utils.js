@@ -25,6 +25,38 @@ export function currentMonthKey() {
   return monthKey(todayStr());
 }
 
+// Первый месяц, за который в компании вообще есть работа/статистика.
+// Рейтинг (и его вкладки месяцев) никогда не показывает месяцы раньше этого —
+// поэтому апрель/май/июнь/июль 2026 в списке не появляются, их просто не было.
+export const WORK_START_MONTH = "2026-08";
+
+// Список месяцев от WORK_START_MONTH до текущего месяца включительно (новые
+// первыми). Список считается от today() при каждом вызове, поэтому 1-го
+// числа каждого нового месяца в рейтинге сама по себе появляется новая
+// вкладка — руками ничего добавлять не нужно, и старые "несуществующие"
+// месяцы до начала работы никогда не всплывают.
+export function monthsSinceStart(startKey = WORK_START_MONTH) {
+  const nowKey = currentMonthKey();
+  if (nowKey < startKey) return [nowKey];
+
+  const [startY, startM] = startKey.split("-").map(Number);
+  const [nowY, nowM] = nowKey.split("-").map(Number);
+  const out = [];
+  let y = nowY;
+  let m = nowM;
+  let guard = 0; // защита от бесконечного цикла при некорректных датах
+  while ((y > startY || (y === startY && m >= startM)) && guard < 600) {
+    out.push(`${y}-${String(m).padStart(2, "0")}`);
+    m -= 1;
+    if (m === 0) {
+      m = 12;
+      y -= 1;
+    }
+    guard += 1;
+  }
+  return out;
+}
+
 export function formatEuro(value) {
   const n = Number(value) || 0;
   return n.toLocaleString("de-DE", {

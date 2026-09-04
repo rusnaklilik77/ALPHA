@@ -4,6 +4,9 @@ import {
   getDoc,
   onSnapshot,
   collection,
+  collectionGroup,
+  query,
+  where,
   deleteDoc,
   serverTimestamp,
   increment,
@@ -79,12 +82,13 @@ export function subscribeEntries(uid, callback) {
   });
 }
 
-export async function upsertEntry(uid, dateStr, { delivered, returns, tips, rate }) {
+export async function upsertEntry(uid, dateStr, { delivered, returns, tips, rate, totalParcels }) {
   const ref = doc(db, "users", uid, "entries", entryId(dateStr));
   await setDoc(
     ref,
     {
       date: dateStr,
+      totalParcels: Number(totalParcels) || 0,
       delivered: Number(delivered) || 0,
       returns: Number(returns) || 0,
       tips: Number(tips) || 0,
@@ -98,6 +102,37 @@ export async function upsertEntry(uid, dateStr, { delivered, returns, tips, rate
 export async function deleteEntry(uid, dateStr) {
   const ref = doc(db, "users", uid, "entries", entryId(dateStr));
   await deleteDoc(ref);
+}
+
+// ---------- Доход за месяц для роли "Шоп" ----------
+// У курьеров на шопе нет ставки за посылку — они просто вводят сумму,
+// которую фактически получили за месяц (например, из ведомости). Хранится
+// отдельно от entries, по одному документу на месяц: users/{uid}/monthlyPay/{YYYY-MM}.
+
+export async function setMonthlyPay(uid, monthKey, amount) {
+  const ref = doc(db, "users", uid, "monthlyPay", monthKey);
+  await setDoc(
+    ref,
+    { amount: Number(amount) || 0, updatedAt: serverTimestamp() },
+    { merge: true }
+  );
+}
+
+// callback получает объект вида { "2026-09": 850, "2026-08": 900, ... }
+export function subscribeMonthlyPay(uid, callback) {
+  if (!uid) return () => {};
+  const colRef = collection(db, "users", uid, "monthlyPay");
+  return onSnapshot(
+    colRef,
+    (snap) => {
+      const map = {};
+      snap.forEach((d) => {
+        map[d.id] = Number(d.data().amount) || 0;
+      });
+      callback(map);
+    },
+    () => callback({})
+  );
 }
 
 // ---------- Режим администратора ----------
@@ -149,6 +184,55 @@ export function subscribeEntriesAdmin(uid, callback) {
     entries.sort((a, b) => (a.id < b.id ? 1 : -1));
     callback(entries);
   });
+}
+
+// ---------- Общий рейтинг сотрудников за месяц (режим администратора) ----------
+// Одним запросом (collectionGroup по подколлекциям "entries" ВСЕХ пользователей)
+// забираем все записи за нужный месяц и суммируем показатели по владельцу
+// документа (uid родителя). Так рейтинг не нужно пересчитывать вручную —
+// как только у сотрудника появляется новая запись за день, счётчик в
+// рейтинге обновляется сам, а новые сотрудники подтягиваются автоматически,
+// как только у них появляется хотя бы одна запись (через subscribeAllUsersAdmin).
+// onError — необязательный колбэк, получающий исходную ошибку Firestore.
+// Раньше при ошибке запроса (например, ещё не создан нужный collection-group
+// индекс в Firestore — см. README, раздел "Индекс для рейтинга") рейтинг
+// молча показывал всем по 0 посылок, и было не понять, реальная это цифра
+// или сломанный запрос. Теперь ошибка дополнительно логируется в консоль и
+// пробрасывается наверх, чтобы интерфейс мог показать понятное сообщение.
+export function subscribeMonthStatsAllUsers(monthKey, callback, onError) {
+  const from = `${monthKey}-01`;
+  const to = `${monthKey}-31`;
+  const q = query(
+    collectionGroup(db, "entries"),
+    where("date", ">=", from),
+    where("date", "<=", to)
+  );
+  return onSnapshot(
+    q,
+    (snap) => {
+      const byUid = new Map();
+      snap.forEach((d) => {
+        const uid = d.ref.parent.parent?.id;
+        if (!uid) return;
+        const data = d.data();
+        if (!byUid.has(uid)) {
+          byUid.set(uid, { delivered: 0, returns: 0, tips: 0, totalParcels: 0, days: 0 });
+        }
+        const b = byUid.get(uid);
+        b.delivered += Number(data.delivered) || 0;
+        b.returns += Number(data.returns) || 0;
+        b.tips += Number(data.tips) || 0;
+        b.totalParcels += Number(data.totalParcels) || 0;
+        b.days += 1;
+      });
+      callback(byUid);
+    },
+    (err) => {
+      console.error("[ALPHA] subscribeMonthStatsAllUsers:", err);
+      if (onError) onError(err);
+      callback(new Map());
+    }
+  );
 }
 
 // ---------- Сканер посылок (QR-код + физический сканер штрихкодов) ----------

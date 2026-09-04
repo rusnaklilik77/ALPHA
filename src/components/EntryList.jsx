@@ -38,8 +38,15 @@ export default function EntryList({ entries, rate, role = "privat", onEdit, onDe
               <div className="text-white font-semibold text-sm sm:text-base">
                 {formatDateHuman(e.id, lang)}
               </div>
-              <div className="text-muted text-xs sm:hidden">
-                {t.entryList.rate} {Number(rate != null ? rate : e.rate).toFixed(2)} €
+              <div className="text-muted text-xs flex flex-wrap gap-x-2">
+                <span className="sm:hidden">
+                  {t.entryList.rate} {Number(rate != null ? rate : e.rate).toFixed(2)} €
+                </span>
+                {Number(e.totalParcels) > 0 && (
+                  <span>
+                    📦 {t.entryList.totalParcels}: <span className="text-white">{e.totalParcels}</span>
+                  </span>
+                )}
               </div>
             </div>
             <div className="text-accent2 font-semibold">

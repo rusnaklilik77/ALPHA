@@ -22,9 +22,16 @@ export default function ScanPage({ uid, token }) {
   const [sessionCounts, setSessionCounts] = useState({ delivered: 0, returns: 0 });
   const [lastScan, setLastScan] = useState("");
   const [saving, setSaving] = useState(false);
+  const [btState, setBtState] = useState("idle"); // idle | connecting | connected | error | unsupported
+  const [btDeviceName, setBtDeviceName] = useState("");
+  const [btError, setBtError] = useState("");
   const bufferRef = useRef("");
   const bufferTimer = useRef(null);
   const hiddenInputRef = useRef(null);
+  const btDeviceRef = useRef(null);
+  const btLineRef = useRef("");
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
 
   useEffect(() => {
     let cancelled = false;
@@ -74,6 +81,77 @@ export default function ScanPage({ uid, token }) {
     } finally {
       setSaving(false);
     }
+  }
+
+  // ---------- Bluetooth (Web Bluetooth API, BLE-сканеры в режиме "serial") ----------
+  // Работает только для сканеров, которые передают данные как BLE GATT
+  // характеристику (например, модули на основе Nordic UART Service — самый
+  // частый стандарт у дешёвых BLE-сканеров/модулей). Обычные Bluetooth-HID
+  // сканеры (эмулирующие клавиатуру) через эту кнопку НЕ подключаются —
+  // их нужно один раз сопрячь в настройках Bluetooth телефона, дальше они
+  // печатают код в скрытое поле выше и всё работает автоматически без
+  // этой кнопки. Кроме того, Web Bluetooth есть только в Chrome/Edge на
+  // Android и на компьютере — в Safari на iPhone его нет вообще (это
+  // ограничение Apple, а не этого сайта).
+  const NUS_SERVICE = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
+  const NUS_TX_CHAR = "6e400003-b5a3-f393-e0a9-e50e24dcca9e";
+
+  function handleBluetoothLine(line) {
+    const code = line.trim();
+    if (!code) return;
+    setLastScan(code);
+    registerHit(modeRef.current);
+  }
+
+  function handleBtValueChanged(event) {
+    const value = event.target.value;
+    if (!value) return;
+    const text = new TextDecoder().decode(value);
+    btLineRef.current += text;
+    const parts = btLineRef.current.split(/[\r\n]+/);
+    btLineRef.current = parts.pop() || "";
+    parts.forEach(handleBluetoothLine);
+  }
+
+  async function connectBluetooth() {
+    if (!navigator.bluetooth) {
+      setBtState("unsupported");
+      return;
+    }
+    setBtState("connecting");
+    setBtError("");
+    try {
+      const device = await navigator.bluetooth.requestDevice({
+        acceptAllDevices: true,
+        optionalServices: [NUS_SERVICE, "battery_service"],
+      });
+      btDeviceRef.current = device;
+      setBtDeviceName(device.name || t.scanPage.btUnnamedDevice);
+
+      device.addEventListener("gattserverdisconnected", () => {
+        setBtState("idle");
+      });
+
+      const server = await device.gatt.connect();
+      const service = await server.getPrimaryService(NUS_SERVICE);
+      const char = await service.getCharacteristic(NUS_TX_CHAR);
+      await char.startNotifications();
+      char.addEventListener("characteristicvaluechanged", handleBtValueChanged);
+
+      setBtState("connected");
+    } catch (err) {
+      setBtState("error");
+      setBtError(err?.message || String(err));
+    }
+  }
+
+  function disconnectBluetooth() {
+    const device = btDeviceRef.current;
+    if (device?.gatt?.connected) {
+      device.gatt.disconnect();
+    }
+    btDeviceRef.current = null;
+    setBtState("idle");
   }
 
   function handleManualAdd() {
@@ -160,6 +238,60 @@ export default function ScanPage({ uid, token }) {
           className="opacity-0 absolute -z-10 w-1 h-1"
           autoFocus
         />
+
+        <div className="bg-panel border border-border rounded-xl2 shadow-card p-5 mb-4">
+          <div className="flex items-center justify-between gap-3 mb-2">
+            <div className="text-sm font-semibold text-white">{t.scanPage.btTitle}</div>
+            <span
+              className={`text-[10px] font-bold uppercase tracking-wide rounded-full px-2 py-0.5 border ${
+                btState === "connected"
+                  ? "bg-accent2/15 border-accent2/40 text-accent2"
+                  : btState === "connecting"
+                  ? "bg-accent/15 border-accent/40 text-accent"
+                  : "bg-panel2 border-border text-muted"
+              }`}
+            >
+              {btState === "connected"
+                ? t.scanPage.btConnected
+                : btState === "connecting"
+                ? t.scanPage.btConnecting
+                : t.scanPage.btIdle}
+            </span>
+          </div>
+
+          {btState === "connected" ? (
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-muted text-xs truncate">{btDeviceName}</div>
+              <button
+                type="button"
+                onClick={disconnectBluetooth}
+                className="shrink-0 text-xs font-semibold text-danger border border-danger/40 hover:bg-danger/10 rounded-lg px-3 py-1.5 transition"
+              >
+                {t.scanPage.btDisconnect}
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={connectBluetooth}
+              disabled={btState === "connecting"}
+              className="w-full text-sm font-semibold bg-panel2 hover:bg-panel border border-border disabled:opacity-60 rounded-lg px-3 py-2.5 text-white transition"
+            >
+              🔵 {t.scanPage.btConnect}
+            </button>
+          )}
+
+          {btState === "unsupported" && (
+            <p className="text-muted/70 text-[11px] mt-2">{t.scanPage.btUnsupported}</p>
+          )}
+          {btState === "error" && (
+            <p className="text-danger/80 text-[11px] mt-2">
+              {t.scanPage.btError}
+              {btError ? `: ${btError}` : ""}
+            </p>
+          )}
+          <p className="text-muted/70 text-[11px] mt-2">{t.scanPage.btHidNote}</p>
+        </div>
 
         <div className="bg-panel border border-border rounded-xl2 shadow-card p-5 mb-4">
           <div className="text-xs font-medium text-muted mb-2">{t.scanPage.modeHint}</div>

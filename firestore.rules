@@ -31,6 +31,13 @@ service cloud.firestore {
       // Изменять свой документ может только сам пользователь.
       allow write: if request.auth != null && request.auth.uid == userId;
 
+      // Доход за месяц для курьеров на шопе (вводится вручную, без ставки за
+      // посылку) — читает сам сотрудник и админ, пишет только сам сотрудник.
+      match /monthlyPay/{monthId} {
+        allow read: if request.auth != null && (request.auth.uid == userId || isAdmin());
+        allow write: if request.auth != null && request.auth.uid == userId;
+      }
+
       match /entries/{entryId} {
         // Свои записи о доставках видит владелец, чужие — только админ
         // (для экрана статистики сотрудника).

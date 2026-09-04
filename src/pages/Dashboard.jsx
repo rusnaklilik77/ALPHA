@@ -9,6 +9,8 @@ import {
   deleteEntry as removeEntry,
   setUserRate,
   setUserGoal,
+  setMonthlyPay,
+  subscribeMonthlyPay,
   DEFAULT_RATE,
   adminLogin,
 } from "../lib/data";
@@ -36,8 +38,9 @@ import GoalModal from "../components/GoalModal";
 import BalanceModal from "../components/BalanceModal";
 import AdminLoginModal from "../components/AdminLoginModal";
 import ScannerModal from "../components/ScannerModal";
+import MonthlyPayModal from "../components/MonthlyPayModal";
 import MonthTabs from "../components/MonthTabs";
-import { TrendChart, WeekdayBarChart } from "../components/Charts";
+import { TrendChart, WeekdayBarChart, DonutChart } from "../components/Charts";
 import AdminPanel from "./AdminPanel";
 
 export default function Dashboard() {
@@ -51,12 +54,14 @@ export default function Dashboard() {
   const [adminOpen, setAdminOpen] = useState(false);
   const [adminLoginOpen, setAdminLoginOpen] = useState(false);
   const [entries, setEntries] = useState([]);
+  const [monthlyPay, setMonthlyPayMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null);
   const [rateModalOpen, setRateModalOpen] = useState(false);
   const [goalModalOpen, setGoalModalOpen] = useState(false);
   const [balanceModalOpen, setBalanceModalOpen] = useState(false);
   const [scannerModalOpen, setScannerModalOpen] = useState(false);
+  const [monthlyPayModalOpen, setMonthlyPayModalOpen] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState(currentMonthKey());
 
   useEffect(() => {
@@ -73,9 +78,11 @@ export default function Dashboard() {
       setEntries(data);
       setLoading(false);
     });
+    const unsubPay = subscribeMonthlyPay(user.uid, setMonthlyPayMap);
     return () => {
       unsubSettings();
       unsubEntries();
+      unsubPay();
     };
   }, [user]);
 
@@ -97,18 +104,40 @@ export default function Dashboard() {
   // всегда считается по АКТУАЛЬНОЙ ставке из настроек, а не по той, что была
   // сохранена в записи в момент её создания. Поменял ставку 0.70 → 0.75 —
   // все суммы (счётчики, графики, история) пересчитываются мгновенно.
+  const isShop = role === "shop";
   const monthEntries = useMemo(() => entriesForMonth(entries, selectedMonth), [entries, selectedMonth]);
-  const monthTotals = useMemo(() => totals(monthEntries, rate), [monthEntries, rate]);
-  const allTimeTotals = useMemo(() => totals(entries, rate), [entries, rate]);
+  const monthTotalsRaw = useMemo(() => totals(monthEntries, rate), [monthEntries, rate]);
+  const allTimeTotalsRaw = useMemo(() => totals(entries, rate), [entries, rate]);
   const weekdayBuckets = useMemo(() => aggregateByWeekday(monthEntries), [monthEntries]);
   const weeklyBreakdown = useMemo(() => aggregateByWeek(monthEntries, rate), [monthEntries, rate]);
   const monthLabel = formatMonthLabel(selectedMonth, lang);
   const breakdown = useMemo(() => monthlyBreakdown(entries, rate), [entries, rate]);
   const bestMonthDay = useMemo(() => bestDay(monthEntries, rate), [monthEntries, rate]);
+
+  // У курьеров на шопе нет ставки за посылку — заработок за месяц это то,
+  // что они сами вписали в "Доход за месяц" (плюс чаевые, которые всегда
+  // приходят отдельно от работодателя). Для приват-курьеров всё считается
+  // как раньше: посылки × ставка + чаевые.
+  const currentMonthlyPay = Number(monthlyPay[selectedMonth]) || 0;
+  const totalMonthlyPayAllTime = useMemo(
+    () => Object.values(monthlyPay).reduce((sum, v) => sum + (Number(v) || 0), 0),
+    [monthlyPay]
+  );
+  const monthTotals = isShop
+    ? { ...monthTotalsRaw, earnings: currentMonthlyPay + monthTotalsRaw.tips }
+    : monthTotalsRaw;
+  const allTimeTotals = isShop
+    ? { ...allTimeTotalsRaw, earnings: totalMonthlyPayAllTime + allTimeTotalsRaw.tips }
+    : allTimeTotalsRaw;
+  // Разбивка "Общий баланс" по месяцам тоже пересчитывается под шоп-заработок,
+  // подставляя фактический доход за каждый месяц вместо расчёта по ставке.
+  const breakdownDisplay = isShop
+    ? breakdown.map((m) => ({ ...m, earnings: (Number(monthlyPay[m.key]) || 0) + m.tips }))
+    : breakdown;
   const goalPct = goal > 0 ? Math.min(100, Math.round((monthTotals.earnings / goal) * 100)) : 0;
 
-  async function handleSubmit({ date, delivered, returns, tips }) {
-    await upsertEntry(user.uid, date, { delivered, returns, tips, rate });
+  async function handleSubmit({ date, totalParcels, delivered, returns, tips }) {
+    await upsertEntry(user.uid, date, { totalParcels, delivered, returns, tips, rate });
     setEditing(null);
   }
 
@@ -146,7 +175,10 @@ export default function Dashboard() {
       <Header
         userName={user?.displayName}
         rate={rate}
+        role={role}
+        monthlyPayAmount={currentMonthlyPay}
         onOpenRate={() => setRateModalOpen(true)}
+        onOpenMonthlyPay={() => setMonthlyPayModalOpen(true)}
         onOpenBalance={() => setBalanceModalOpen(true)}
         onOpenScanner={() => setScannerModalOpen(true)}
         onLogout={logout}
@@ -350,6 +382,12 @@ export default function Dashboard() {
                 title={t.dashboard.charts.weekdayReturns}
               />
             </div>
+            <div className="bg-panel border border-border rounded-xl2 shadow-card p-5 flex flex-col items-center">
+              <h4 className="text-white font-semibold text-sm mb-2 self-start">
+                {t.dashboard.charts.donutTitle(monthLabel)}
+              </h4>
+              <DonutChart delivered={monthTotals.delivered} returns={monthTotals.returns} />
+            </div>
           </div>
         </div>
 
@@ -400,10 +438,19 @@ export default function Dashboard() {
 
       {balanceModalOpen && (
         <BalanceModal
-          breakdown={breakdown}
+          breakdown={breakdownDisplay}
           grandTotal={allTimeTotals}
           role={role}
           onClose={() => setBalanceModalOpen(false)}
+        />
+      )}
+
+      {monthlyPayModalOpen && (
+        <MonthlyPayModal
+          monthLabel={monthLabel}
+          currentAmount={currentMonthlyPay}
+          onSave={(amount) => setMonthlyPay(user.uid, selectedMonth, amount)}
+          onClose={() => setMonthlyPayModalOpen(false)}
         />
       )}
 

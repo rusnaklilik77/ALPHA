@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLanguage } from "../context/LanguageContext";
-import { subscribeAllUsersAdmin, subscribeEntriesAdmin, adminLogout, DEFAULT_RATE, DEFAULT_ROLE } from "../lib/data";
+import {
+  subscribeAllUsersAdmin,
+  subscribeEntriesAdmin,
+  subscribeMonthlyPay,
+  adminLogout,
+  DEFAULT_RATE,
+  DEFAULT_ROLE,
+} from "../lib/data";
 import {
   totals,
   formatEuro,
@@ -13,7 +20,8 @@ import {
 import StatCard from "../components/StatCard";
 import EntryList from "../components/EntryList";
 import MonthTabs from "../components/MonthTabs";
-import { TrendChart } from "../components/Charts";
+import Leaderboard from "../components/Leaderboard";
+import { TrendChart, DonutChart } from "../components/Charts";
 
 // Режим администратора: список всех зарегистрированных сотрудников (по
 // документам users/*) с поиском по имени/ID, и статистика выбранного
@@ -24,11 +32,13 @@ import { TrendChart } from "../components/Charts";
 // отображает то, что сервер согласился отдать.
 export default function AdminPanel({ currentUid, onClose }) {
   const { t, lang } = useLanguage();
+  const [view, setView] = useState("employees"); // employees | rating
   const [employees, setEmployees] = useState([]);
   const [loadingList, setLoadingList] = useState(true);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(null);
   const [entries, setEntries] = useState([]);
+  const [selectedMonthlyPay, setSelectedMonthlyPay] = useState({});
   const [loadingEntries, setLoadingEntries] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState(currentMonthKey());
 
@@ -51,7 +61,11 @@ export default function AdminPanel({ currentUid, onClose }) {
       setEntries(data);
       setLoadingEntries(false);
     });
-    return unsub;
+    const unsubPay = subscribeMonthlyPay(selected.uid, setSelectedMonthlyPay);
+    return () => {
+      unsub();
+      unsubPay();
+    };
   }, [selected]);
 
   function handleClose() {
@@ -87,9 +101,27 @@ export default function AdminPanel({ currentUid, onClose }) {
   }, [months]);
   const monthEntries = useMemo(() => entriesForMonth(entries, selectedMonth), [entries, selectedMonth]);
   const monthLabel = formatMonthLabel(selectedMonth, lang);
-  const monthStats = useMemo(() => totals(monthEntries, selectedRate), [monthEntries, selectedRate]);
-  const allTimeStats = useMemo(() => totals(entries, selectedRate), [entries, selectedRate]);
-  const breakdown = useMemo(() => monthlyBreakdown(entries, selectedRate), [entries, selectedRate]);
+  const monthStatsRaw = useMemo(() => totals(monthEntries, selectedRate), [monthEntries, selectedRate]);
+  const allTimeStatsRaw = useMemo(() => totals(entries, selectedRate), [entries, selectedRate]);
+  const breakdownRaw = useMemo(() => monthlyBreakdown(entries, selectedRate), [entries, selectedRate]);
+
+  // Как и на дашборде сотрудника: для роли "Шоп" заработок — это сумма,
+  // введённая самим сотрудником за месяц, а не посылки × ставка.
+  const isSelectedShop = selectedRole === "shop";
+  const selectedMonthlyPayAmount = Number(selectedMonthlyPay[selectedMonth]) || 0;
+  const totalSelectedMonthlyPay = useMemo(
+    () => Object.values(selectedMonthlyPay).reduce((sum, v) => sum + (Number(v) || 0), 0),
+    [selectedMonthlyPay]
+  );
+  const monthStats = isSelectedShop
+    ? { ...monthStatsRaw, earnings: selectedMonthlyPayAmount + monthStatsRaw.tips }
+    : monthStatsRaw;
+  const allTimeStats = isSelectedShop
+    ? { ...allTimeStatsRaw, earnings: totalSelectedMonthlyPay + allTimeStatsRaw.tips }
+    : allTimeStatsRaw;
+  const breakdown = isSelectedShop
+    ? breakdownRaw.map((m) => ({ ...m, earnings: (Number(selectedMonthlyPay[m.key]) || 0) + m.tips }))
+    : breakdownRaw;
 
   return (
     <div className="min-h-screen bg-bg pb-16">
@@ -109,7 +141,32 @@ export default function AdminPanel({ currentUid, onClose }) {
       </header>
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 pt-6 space-y-6">
-        {!selected ? (
+        {!selected && (
+          <div className="flex bg-panel2 rounded-lg p-1 max-w-xs">
+            <button
+              type="button"
+              onClick={() => setView("employees")}
+              className={`flex-1 py-2 rounded-md text-sm font-semibold transition ${
+                view === "employees" ? "bg-accent text-bg" : "text-muted hover:text-white"
+              }`}
+            >
+              {t.admin.tabEmployees}
+            </button>
+            <button
+              type="button"
+              onClick={() => setView("rating")}
+              className={`flex-1 py-2 rounded-md text-sm font-semibold transition ${
+                view === "rating" ? "bg-accent text-bg" : "text-muted hover:text-white"
+              }`}
+            >
+              {t.admin.tabRating}
+            </button>
+          </div>
+        )}
+
+        {!selected && view === "rating" ? (
+          <Leaderboard employees={employees} currentUid={currentUid} />
+        ) : !selected ? (
           <>
             <div className="relative">
               <input
@@ -178,10 +235,21 @@ export default function AdminPanel({ currentUid, onClose }) {
                 </div>
               </div>
               <div className="text-right">
-                <div className="text-muted text-xs uppercase tracking-wide">{t.admin.rate}</div>
-                <div className="text-accent font-bold text-lg">
-                  {Number(selected.rate ?? DEFAULT_RATE).toFixed(2)} €
-                </div>
+                {isSelectedShop ? (
+                  <>
+                    <div className="text-muted text-xs uppercase tracking-wide">
+                      {t.admin.monthlyPayLabel(monthLabel)}
+                    </div>
+                    <div className="text-accent font-bold text-lg">{formatEuro(selectedMonthlyPayAmount)}</div>
+                  </>
+                ) : (
+                  <>
+                    <div className="text-muted text-xs uppercase tracking-wide">{t.admin.rate}</div>
+                    <div className="text-accent font-bold text-lg">
+                      {Number(selected.rate ?? DEFAULT_RATE).toFixed(2)} €
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 
@@ -297,11 +365,19 @@ export default function AdminPanel({ currentUid, onClose }) {
                   />
                 </div>
 
-                <div className="bg-panel border border-border rounded-xl2 shadow-card p-5">
-                  <h4 className="text-white font-semibold text-sm mb-2">
-                    {t.dashboard.charts.deliveredTrend}
-                  </h4>
-                  <TrendChart entries={monthEntries} />
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <div className="bg-panel border border-border rounded-xl2 shadow-card p-5">
+                    <h4 className="text-white font-semibold text-sm mb-2">
+                      {t.dashboard.charts.deliveredTrend}
+                    </h4>
+                    <TrendChart entries={monthEntries} />
+                  </div>
+                  <div className="bg-panel border border-border rounded-xl2 shadow-card p-5 flex flex-col items-center">
+                    <h4 className="text-white font-semibold text-sm mb-2 self-start">
+                      {t.dashboard.charts.donutTitle(monthLabel)}
+                    </h4>
+                    <DonutChart delivered={monthStats.delivered} returns={monthStats.returns} />
+                  </div>
                 </div>
 
                 <div>

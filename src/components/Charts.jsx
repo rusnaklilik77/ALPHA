@@ -1,5 +1,85 @@
 import { useLanguage } from "../context/LanguageContext";
 
+// ---------- Кольцевая диаграмма: отдано (зелёным) vs возвраты (красным) ----------
+// Показывает соотношение за выбранный месяц одним взглядом — в центре общее
+// число посылок (отдано + возвраты), вокруг — два цветных сегмента кольца.
+// Используется и на дашборде сотрудника, и в режиме администратора у каждого
+// сотрудника отдельно.
+export function DonutChart({ delivered = 0, returns = 0, size = 176 }) {
+  const { t } = useLanguage();
+  const d = Math.max(0, Number(delivered) || 0);
+  const r = Math.max(0, Number(returns) || 0);
+  const total = d + r;
+
+  const radius = 44;
+  const stroke = 16;
+  const circumference = 2 * Math.PI * radius;
+  const deliveredFrac = total > 0 ? d / total : 0;
+  const returnsFrac = total > 0 ? r / total : 0;
+  const deliveredLen = circumference * deliveredFrac;
+  const returnsLen = circumference * returnsFrac;
+  const deliveredPct = total > 0 ? Math.round(deliveredFrac * 100) : 0;
+  const returnsPct = total > 0 ? Math.round(returnsFrac * 100) : 0;
+
+  return (
+    <div className="flex flex-col items-center">
+      <div className="relative" style={{ width: size, height: size }}>
+        <svg viewBox="0 0 120 120" width={size} height={size}>
+          <circle cx="60" cy="60" r={radius} fill="none" stroke="#1f2937" strokeWidth={stroke} />
+          {total > 0 && (
+            <>
+              {/* Возвраты — красный сегмент */}
+              <circle
+                cx="60"
+                cy="60"
+                r={radius}
+                fill="none"
+                stroke="#ef4444"
+                strokeWidth={stroke}
+                strokeDasharray={`${returnsLen} ${circumference - returnsLen}`}
+                strokeDashoffset={0}
+                transform="rotate(-90 60 60)"
+                strokeLinecap="butt"
+              />
+              {/* Отдано — зелёный сегмент, начинается сразу после красного */}
+              <circle
+                cx="60"
+                cy="60"
+                r={radius}
+                fill="none"
+                stroke="#22c55e"
+                strokeWidth={stroke}
+                strokeDasharray={`${deliveredLen} ${circumference - deliveredLen}`}
+                strokeDashoffset={-returnsLen}
+                transform="rotate(-90 60 60)"
+                strokeLinecap="butt"
+              />
+            </>
+          )}
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <span className="text-white font-black text-xl sm:text-2xl leading-none">{total}</span>
+          <span className="text-muted text-[10px] uppercase tracking-wide mt-1">
+            {t.dashboard.charts.donutCenter}
+          </span>
+        </div>
+      </div>
+      <div className="flex items-center gap-4 mt-3 text-xs text-muted flex-wrap justify-center">
+        <span className="flex items-center gap-1.5">
+          <span className="w-2.5 h-2.5 rounded-full bg-accent2 inline-block" />
+          {t.dashboard.charts.deliveredLegend}: <span className="text-white font-semibold">{d}</span>{" "}
+          <span className="text-accent2">({deliveredPct}%)</span>
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-2.5 h-2.5 rounded-full bg-danger inline-block" />
+          {t.dashboard.charts.returnsLegend}: <span className="text-white font-semibold">{r}</span>{" "}
+          <span className="text-danger">({returnsPct}%)</span>
+        </span>
+      </div>
+    </div>
+  );
+}
+
 // ---------- Линейный график: динамика посылок/возвратов по дням месяца ----------
 
 export function TrendChart({ entries }) {
