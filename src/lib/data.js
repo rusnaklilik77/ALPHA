@@ -104,6 +104,38 @@ export async function deleteEntry(uid, dateStr) {
   await deleteDoc(ref);
 }
 
+// ---------- "Доп. сведения" — завершение тура с геометкой ----------
+// Хранится прямо в записи за день (users/{uid}/entries/{dateStr}), поле
+// tourFinish: { lat, lng, accuracy, finishedAt }. finishedAt — обычная ISO
+// строка (Date().toISOString()), а не serverTimestamp(), потому что нам
+// важно именно локальное время телефона сотрудника в момент завершения
+// маршрута, а не время получения записи сервером.
+export async function setTourFinish(uid, dateStr, { lat, lng, accuracy }) {
+  const ref = doc(db, "users", uid, "entries", entryId(dateStr));
+  const finishedAt = new Date().toISOString();
+  await setDoc(
+    ref,
+    {
+      date: dateStr,
+      tourFinish: {
+        lat: Number(lat),
+        lng: Number(lng),
+        accuracy: accuracy != null ? Number(accuracy) : null,
+        finishedAt,
+      },
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  );
+  return finishedAt;
+}
+
+// Убирает отметку о завершении тура за день (если сотрудник нажал по ошибке).
+export async function clearTourFinish(uid, dateStr) {
+  const ref = doc(db, "users", uid, "entries", entryId(dateStr));
+  await setDoc(ref, { tourFinish: null }, { merge: true });
+}
+
 // ---------- Доход за месяц для роли "Шоп" ----------
 // У курьеров на шопе нет ставки за посылку — они просто вводят сумму,
 // которую фактически получили за месяц (например, из ведомости). Хранится

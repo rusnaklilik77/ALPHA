@@ -38,6 +38,7 @@ import GoalModal from "../components/GoalModal";
 import BalanceModal from "../components/BalanceModal";
 import AdminLoginModal from "../components/AdminLoginModal";
 import ScannerModal from "../components/ScannerModal";
+import TourInfoModal from "../components/TourInfoModal";
 import MonthlyPayModal from "../components/MonthlyPayModal";
 import MonthTabs from "../components/MonthTabs";
 import { TrendChart, WeekdayBarChart, DonutChart } from "../components/Charts";
@@ -61,6 +62,7 @@ export default function Dashboard() {
   const [goalModalOpen, setGoalModalOpen] = useState(false);
   const [balanceModalOpen, setBalanceModalOpen] = useState(false);
   const [scannerModalOpen, setScannerModalOpen] = useState(false);
+  const [tourInfoOpen, setTourInfoOpen] = useState(false);
   const [monthlyPayModalOpen, setMonthlyPayModalOpen] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState(currentMonthKey());
 
@@ -123,18 +125,24 @@ export default function Dashboard() {
     () => Object.values(monthlyPay).reduce((sum, v) => sum + (Number(v) || 0), 0),
     [monthlyPay]
   );
+  // income — основной заработок БЕЗ чаевых (посылки × ставка для приват,
+  // либо вручную введённый доход за месяц для шопа). earnings оставлен как
+  // income+tips для мест, где осознанно нужна итоговая сумма на руки
+  // (например, строка "лучший день"). На дашборде чаевые нигде не
+  // прибавляются молча к основному доходу — по просьбе пользователя они
+  // всегда отдельный, самостоятельный счётчик.
   const monthTotals = isShop
-    ? { ...monthTotalsRaw, earnings: currentMonthlyPay + monthTotalsRaw.tips }
+    ? { ...monthTotalsRaw, income: currentMonthlyPay, earnings: currentMonthlyPay + monthTotalsRaw.tips }
     : monthTotalsRaw;
   const allTimeTotals = isShop
-    ? { ...allTimeTotalsRaw, earnings: totalMonthlyPayAllTime + allTimeTotalsRaw.tips }
+    ? { ...allTimeTotalsRaw, income: totalMonthlyPayAllTime, earnings: totalMonthlyPayAllTime + allTimeTotalsRaw.tips }
     : allTimeTotalsRaw;
   // Разбивка "Общий баланс" по месяцам тоже пересчитывается под шоп-заработок,
   // подставляя фактический доход за каждый месяц вместо расчёта по ставке.
   const breakdownDisplay = isShop
-    ? breakdown.map((m) => ({ ...m, earnings: (Number(monthlyPay[m.key]) || 0) + m.tips }))
+    ? breakdown.map((m) => ({ ...m, income: Number(monthlyPay[m.key]) || 0, earnings: (Number(monthlyPay[m.key]) || 0) + m.tips }))
     : breakdown;
-  const goalPct = goal > 0 ? Math.min(100, Math.round((monthTotals.earnings / goal) * 100)) : 0;
+  const goalPct = goal > 0 ? Math.min(100, Math.round((monthTotals.income / goal) * 100)) : 0;
 
   async function handleSubmit({ date, totalParcels, delivered, returns, tips }) {
     await upsertEntry(user.uid, date, { totalParcels, delivered, returns, tips, rate });
@@ -181,6 +189,7 @@ export default function Dashboard() {
         onOpenMonthlyPay={() => setMonthlyPayModalOpen(true)}
         onOpenBalance={() => setBalanceModalOpen(true)}
         onOpenScanner={() => setScannerModalOpen(true)}
+        onOpenTourInfo={() => setTourInfoOpen(true)}
         onLogout={logout}
         onLogoClick={handleLogoClick}
       />
@@ -195,14 +204,15 @@ export default function Dashboard() {
       <main className="max-w-5xl mx-auto px-4 sm:px-6 pt-6 space-y-6">
         {/* Главный счётчик — заработок за выбранный месяц */}
         <div className="relative bg-gradient-to-br from-panel to-panel2 border border-accent/30 rounded-xl2 shadow-card p-6 sm:p-8">
-          {/* Счётчик чаевых за всё время — фиксирован в углу карточки */}
+          {/* Счётчик чаевых — за ВЫБРАННЫЙ месяц (не за всё время), по просьбе
+              пользователя: тут должна быть сумма чаевых именно за месяц. */}
           <div
             className="absolute top-4 right-4 sm:top-6 sm:right-6 flex items-center gap-1.5 bg-accent/15 border border-accent/40 rounded-full pl-2.5 pr-3 py-1.5"
-            title={t.dashboard.tipsAllTimeTitle}
+            title={t.dashboard.tipsMonthTitle}
           >
             <span className="text-base leading-none">🎁</span>
             <span className="text-accent font-bold text-xs sm:text-sm">
-              {formatEuro(allTimeTotals.tips)}
+              {formatEuro(monthTotals.tips)}
             </span>
           </div>
 
@@ -210,8 +220,9 @@ export default function Dashboard() {
             {t.dashboard.earnedIn(monthLabel)}
           </span>
           <div className="text-4xl sm:text-6xl font-black text-white tracking-tight mt-2">
-            {formatEuro(monthTotals.earnings)}
+            {formatEuro(monthTotals.income)}
           </div>
+          <div className="text-muted/70 text-xs mt-1">{t.dashboard.excludesTips}</div>
           <div className="flex flex-wrap gap-x-6 gap-y-1 mt-4 text-sm text-muted">
             <span>
               📦 <span className="text-accent2 font-semibold">{monthTotals.delivered}</span>{" "}
@@ -271,7 +282,7 @@ export default function Dashboard() {
               через вкладки месяцев (MonthTabs) и окно "Общий баланс". */}
           <StatCard
             label={t.dashboard.totalAllTime}
-            value={formatEuro(allTimeTotals.earnings)}
+            value={formatEuro(allTimeTotals.income)}
             valueColor="text-white"
             icon="💶"
           />
@@ -295,7 +306,7 @@ export default function Dashboard() {
           />
           <StatCard
             label={t.dashboard.avgPerDay}
-            value={formatEuro(monthTotals.days ? monthTotals.earnings / monthTotals.days : 0)}
+            value={formatEuro(monthTotals.days ? monthTotals.income / monthTotals.days : 0)}
             valueColor="text-accent"
             icon="📊"
           />
@@ -382,6 +393,15 @@ export default function Dashboard() {
                 title={t.dashboard.charts.weekdayReturns}
               />
             </div>
+            <div className="bg-panel border border-border rounded-xl2 shadow-card p-5">
+              <WeekdayBarChart
+                buckets={weekdayBuckets}
+                metric="tips"
+                color={{ strong: "#eab308", soft: "#4a3f1c" }}
+                title={t.dashboard.charts.weekdayTips}
+                formatValue={(v) => `${v.toFixed(2)}€`}
+              />
+            </div>
             <div className="bg-panel border border-border rounded-xl2 shadow-card p-5 flex flex-col items-center">
               <h4 className="text-white font-semibold text-sm mb-2 self-start">
                 {t.dashboard.charts.donutTitle(monthLabel)}
@@ -459,6 +479,14 @@ export default function Dashboard() {
           uid={user.uid}
           scanToken={scanToken}
           onClose={() => setScannerModalOpen(false)}
+        />
+      )}
+
+      {tourInfoOpen && (
+        <TourInfoModal
+          uid={user.uid}
+          entries={entries}
+          onClose={() => setTourInfoOpen(false)}
         />
       )}
     </div>

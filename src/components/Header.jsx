@@ -11,6 +11,7 @@ export default function Header({
   onOpenMonthlyPay,
   onOpenBalance,
   onOpenScanner,
+  onOpenTourInfo,
   onLogout,
   onLogoClick,
 }) {
@@ -116,6 +117,16 @@ export default function Header({
               📷 {t.header.scanner}
             </button>
           )}
+          {onOpenTourInfo && (
+            <button
+              onClick={onOpenTourInfo}
+              className="w-9 h-9 flex items-center justify-center text-base bg-panel2 hover:bg-panel border border-border rounded-lg text-white transition"
+              title={t.header.tourInfoTitle}
+              aria-label={t.header.tourInfoTitle}
+            >
+              ⚙️
+            </button>
+          )}
           <button
             onClick={onLogout}
             className="text-xs sm:text-sm font-semibold text-muted hover:text-danger border border-border hover:border-danger rounded-lg px-3 py-2 transition"
@@ -208,6 +219,18 @@ export default function Header({
                 title={t.header.scannerTitle}
               >
                 📷 {t.header.scanner}
+              </button>
+            )}
+            {onOpenTourInfo && (
+              <button
+                onClick={() => {
+                  onOpenTourInfo();
+                  setMenuOpen(false);
+                }}
+                className="w-full text-left text-sm font-semibold bg-panel2 hover:bg-panel border border-border rounded-lg px-3 py-2.5 text-white transition"
+                title={t.header.tourInfoTitle}
+              >
+                ⚙️ {t.header.tourInfo}
               </button>
             )}
             <button

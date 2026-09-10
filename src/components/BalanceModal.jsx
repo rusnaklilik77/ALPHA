@@ -26,8 +26,9 @@ export default function BalanceModal({ breakdown, grandTotal, role = "privat", o
             {t.balanceModal.grandTotal}
           </span>
           <div className="text-3xl sm:text-4xl font-black text-white tracking-tight mt-1">
-            {formatEuro(grandTotal.earnings)}
+            {formatEuro(grandTotal.income)}
           </div>
+          <div className="text-muted/70 text-xs mt-1">{t.balanceModal.excludesTips}</div>
           <div className="flex flex-wrap gap-x-5 gap-y-1 mt-3 text-sm text-muted">
             <span>
               📦 <span className="text-accent2 font-semibold">{grandTotal.delivered}</span>{" "}
@@ -63,7 +64,7 @@ export default function BalanceModal({ breakdown, grandTotal, role = "privat", o
                 </div>
               </div>
               <div className="text-white font-bold text-sm sm:text-base shrink-0">
-                {formatEuro(m.earnings)}
+                {formatEuro(m.income)}
               </div>
             </div>
           ))}

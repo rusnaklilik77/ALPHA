@@ -113,14 +113,16 @@ export default function AdminPanel({ currentUid, onClose }) {
     () => Object.values(selectedMonthlyPay).reduce((sum, v) => sum + (Number(v) || 0), 0),
     [selectedMonthlyPay]
   );
+  // Как и на дашборде сотрудника: income — доход без чаевых, чаевые всегда
+  // отображаются отдельным счётчиком и никогда не приплюсовываются молча.
   const monthStats = isSelectedShop
-    ? { ...monthStatsRaw, earnings: selectedMonthlyPayAmount + monthStatsRaw.tips }
+    ? { ...monthStatsRaw, income: selectedMonthlyPayAmount, earnings: selectedMonthlyPayAmount + monthStatsRaw.tips }
     : monthStatsRaw;
   const allTimeStats = isSelectedShop
-    ? { ...allTimeStatsRaw, earnings: totalSelectedMonthlyPay + allTimeStatsRaw.tips }
+    ? { ...allTimeStatsRaw, income: totalSelectedMonthlyPay, earnings: totalSelectedMonthlyPay + allTimeStatsRaw.tips }
     : allTimeStatsRaw;
   const breakdown = isSelectedShop
-    ? breakdownRaw.map((m) => ({ ...m, earnings: (Number(selectedMonthlyPay[m.key]) || 0) + m.tips }))
+    ? breakdownRaw.map((m) => ({ ...m, income: Number(selectedMonthlyPay[m.key]) || 0, earnings: (Number(selectedMonthlyPay[m.key]) || 0) + m.tips }))
     : breakdownRaw;
 
   return (
@@ -265,7 +267,7 @@ export default function AdminPanel({ currentUid, onClose }) {
                   <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
                     <StatCard
                       label={t.admin.earnings}
-                      value={formatEuro(allTimeStats.earnings)}
+                      value={formatEuro(allTimeStats.income)}
                       valueColor="text-white"
                       icon="💶"
                     />
@@ -323,7 +325,7 @@ export default function AdminPanel({ currentUid, onClose }) {
                               <span className="text-white font-semibold">{m.days}</span>
                             </div>
                           </div>
-                          <div className="text-white font-bold text-base shrink-0">{formatEuro(m.earnings)}</div>
+                          <div className="text-white font-bold text-base shrink-0">{formatEuro(m.income)}</div>
                         </div>
                       ))
                     )}
@@ -335,7 +337,7 @@ export default function AdminPanel({ currentUid, onClose }) {
                 <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
                   <StatCard
                     label={t.admin.earnings}
-                    value={formatEuro(monthStats.earnings)}
+                    value={formatEuro(monthStats.income)}
                     valueColor="text-white"
                     icon="💶"
                   />

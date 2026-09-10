@@ -1,4 +1,4 @@
-import { entryEarnings, formatDateHuman, formatEuro } from "../lib/utils";
+import { entryEarnings, formatDateHuman, formatEuro, formatTimeShort, mapsLink } from "../lib/utils";
 import { useLanguage } from "../context/LanguageContext";
 
 export default function EntryList({ entries, rate, role = "privat", onEdit, onDelete, emptyMessage, readOnly = false }) {
@@ -46,6 +46,19 @@ export default function EntryList({ entries, rate, role = "privat", onEdit, onDe
                   <span>
                     📦 {t.entryList.totalParcels}: <span className="text-white">{e.totalParcels}</span>
                   </span>
+                )}
+                {/* Место и время завершения тура ("Доп. сведения" через шестерёнку) —
+                    видно и самому сотруднику, и админу в его карточке. */}
+                {e.tourFinish && (
+                  <a
+                    href={mapsLink(e.tourFinish.lat, e.tourFinish.lng)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(ev) => ev.stopPropagation()}
+                    className="text-accent hover:underline"
+                  >
+                    📍 {t.entryList.tourFinish}: {formatTimeShort(e.tourFinish.finishedAt)}
+                  </a>
                 )}
               </div>
             </div>

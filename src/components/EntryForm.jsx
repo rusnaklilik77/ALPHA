@@ -4,14 +4,14 @@ import { useLanguage } from "../context/LanguageContext";
 
 // Один день = одна запись. Логика по инструкции: с утра сотрудник вписывает
 // только "Всего посылок" (сколько получил на руки), а вечером открывает эту
-// же запись через "Изменить" и дописывает, сколько отдал / вернул / получил
-// чаевых. Поля не связаны друг с другом — при повторном сохранении меняются
-// только те значения, что реально стоят в форме на момент нажатия "Сохранить".
+// же запись через "Изменить" и дописывает, сколько вернул / получил чаевых.
+// "Отдано посылок" больше не вводится руками — считается автоматически как
+// Всего посылок − Возвраты, чтобы это не нужно было держать в уме и вбивать
+// вручную каждый вечер.
 export default function EntryForm({ rate, role = "privat", onSubmit, existing, onCancel }) {
   const { t } = useLanguage();
   const [date, setDate] = useState(existing?.id || todayStr());
   const [totalParcels, setTotalParcels] = useState(existing?.totalParcels ?? "");
-  const [delivered, setDelivered] = useState(existing?.delivered ?? "");
   const [returns, setReturns] = useState(existing?.returns ?? "");
   const [tips, setTips] = useState(existing?.tips ?? "");
   const [busy, setBusy] = useState(false);
@@ -20,11 +20,14 @@ export default function EntryForm({ rate, role = "privat", onSubmit, existing, o
     if (existing) {
       setDate(existing.id);
       setTotalParcels(existing.totalParcels ?? "");
-      setDelivered(existing.delivered ?? "");
       setReturns(existing.returns ?? "");
       setTips(existing.tips ?? "");
     }
   }, [existing]);
+
+  // Автоматический расчёт: "Отдано" = "Всего посылок" − "Возвраты", но не
+  // меньше нуля (на случай, если возвраты вписали раньше, чем итог за день).
+  const delivered = Math.max(0, (Number(totalParcels) || 0) - (Number(returns) || 0));
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -33,13 +36,12 @@ export default function EntryForm({ rate, role = "privat", onSubmit, existing, o
       await onSubmit({
         date,
         totalParcels: Number(totalParcels) || 0,
-        delivered: Number(delivered) || 0,
+        delivered,
         returns: Number(returns) || 0,
         tips: Number(tips) || 0,
       });
       if (!existing) {
         setTotalParcels("");
-        setDelivered("");
         setReturns("");
         setTips("");
       }
@@ -88,18 +90,6 @@ export default function EntryForm({ rate, role = "privat", onSubmit, existing, o
           />
         </div>
         <div>
-          <label className="block text-xs font-medium text-muted mb-1.5">{t.entryForm.deliveredLabel(role)}</label>
-          <input
-            type="number"
-            min="0"
-            inputMode="numeric"
-            value={delivered}
-            onChange={(e) => setDelivered(e.target.value)}
-            placeholder="0"
-            className="w-full bg-panel2 border border-border rounded-lg px-3 py-2.5 text-accent2 placeholder:text-muted/60 outline-none focus:border-accent transition"
-          />
-        </div>
-        <div>
           <label className="block text-xs font-medium text-muted mb-1.5">{t.entryForm.returnsLabel(role)}</label>
           <input
             type="number"
@@ -110,6 +100,18 @@ export default function EntryForm({ rate, role = "privat", onSubmit, existing, o
             placeholder="0"
             className="w-full bg-panel2 border border-border rounded-lg px-3 py-2.5 text-danger placeholder:text-muted/60 outline-none focus:border-accent transition"
           />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-muted mb-1.5">
+            {t.entryForm.deliveredLabel(role)}{" "}
+            <span className="normal-case text-muted/70">{t.entryForm.autoBadge}</span>
+          </label>
+          <div
+            className="w-full bg-panel2/60 border border-border/60 rounded-lg px-3 py-2.5 text-accent2 font-semibold cursor-not-allowed select-none"
+            title={t.entryForm.autoHint}
+          >
+            {delivered}
+          </div>
         </div>
         <div>
           <label className="block text-xs font-medium text-muted mb-1.5">{t.entryForm.tips}</label>

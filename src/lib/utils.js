@@ -93,11 +93,26 @@ export function formatMonthLabel(key, lang = "ru") {
 // графики «задним числом», как и просил пользователь. Если rateOverride
 // не передан (undefined/null) — используется историческая ставка записи
 // (нужно, например, для CSV-выгрузки, где важна точная ставка того дня).
-export function entryEarnings(entry, rateOverride) {
+//
+// Доход от посылок (без чаевых) — намеренно ОТДЕЛЬНАЯ функция от
+// entryEarnings ниже. Чаевые — деньги от клиента, а не от работодателя,
+// и по просьбе пользователя они нигде не должны "сливаться" с основным
+// заработком: везде, где считается основной доход (заголовок дашборда,
+// карточки "Всего", "Общий баланс", режим администратора), используется
+// именно entryIncome, а чаевые показываются отдельным счётчиком рядом.
+export function entryIncome(entry, rateOverride) {
   const delivered = Number(entry.delivered) || 0;
   const rate = rateOverride != null ? Number(rateOverride) || 0 : Number(entry.rate) || 0;
+  return delivered * rate;
+}
+
+// Доход от посылок + чаевые вместе — используется только там, где
+// осознанно нужна ИТОГОВАЯ сумма на руки за день (например, колонка
+// "Заработок" в истории по дням или сравнение "лучшего дня"), а не как
+// замена раздельному отображению на дашборде.
+export function entryEarnings(entry, rateOverride) {
   const tips = Number(entry.tips) || 0;
-  return delivered * rate + tips;
+  return entryIncome(entry, rateOverride) + tips;
 }
 
 // Считает суммарные показатели по массиву записей
@@ -107,11 +122,12 @@ export function totals(entries, rateOverride) {
       acc.delivered += Number(e.delivered) || 0;
       acc.returns += Number(e.returns) || 0;
       acc.tips += Number(e.tips) || 0;
+      acc.income += entryIncome(e, rateOverride);
       acc.earnings += entryEarnings(e, rateOverride);
       acc.days += 1;
       return acc;
     },
-    { delivered: 0, returns: 0, tips: 0, earnings: 0, days: 0 }
+    { delivered: 0, returns: 0, tips: 0, income: 0, earnings: 0, days: 0 }
   );
 }
 
@@ -131,12 +147,13 @@ export function monthlyBreakdown(entries, rateOverride) {
   for (const e of entries) {
     const key = monthKey(e.id);
     if (!map.has(key)) {
-      map.set(key, { key, delivered: 0, returns: 0, tips: 0, earnings: 0, days: 0 });
+      map.set(key, { key, delivered: 0, returns: 0, tips: 0, income: 0, earnings: 0, days: 0 });
     }
     const bucket = map.get(key);
     bucket.delivered += Number(e.delivered) || 0;
     bucket.returns += Number(e.returns) || 0;
     bucket.tips += Number(e.tips) || 0;
+    bucket.income += entryIncome(e, rateOverride);
     bucket.earnings += entryEarnings(e, rateOverride);
     bucket.days += 1;
   }
@@ -154,7 +171,7 @@ export function aggregateByWeek(entries, rateOverride) {
     const day = Number(e.id.slice(8, 10));
     const week = Math.ceil(day / 7);
     if (!map.has(week)) {
-      map.set(week, { week, from: day, to: day, delivered: 0, returns: 0, tips: 0, earnings: 0, days: 0 });
+      map.set(week, { week, from: day, to: day, delivered: 0, returns: 0, tips: 0, income: 0, earnings: 0, days: 0 });
     }
     const bucket = map.get(week);
     bucket.from = Math.min(bucket.from, day);
@@ -162,6 +179,7 @@ export function aggregateByWeek(entries, rateOverride) {
     bucket.delivered += Number(e.delivered) || 0;
     bucket.returns += Number(e.returns) || 0;
     bucket.tips += Number(e.tips) || 0;
+    bucket.income += entryIncome(e, rateOverride);
     bucket.earnings += entryEarnings(e, rateOverride);
     bucket.days += 1;
   }
@@ -189,7 +207,10 @@ export function listMonths(entries) {
 
 // Выгружает записи в CSV-файл и запускает скачивание в браузере.
 export function exportEntriesToCSV(entries, { filename = "alpha-history.csv", headers, rateOverride } = {}) {
-  const cols = headers || ["date", "delivered", "returns", "tips", "rate", "earnings"];
+  // "income" (посылки × ставка) и "tips" (чаевые) идут отдельными колонками —
+  // чтобы в выгрузке они тоже не сливались в одну сумму, "total" — это уже
+  // просто их сумма, для удобства сверки.
+  const cols = headers || ["date", "delivered", "returns", "income", "tips", "rate", "total"];
   const sorted = [...entries].sort((a, b) => (a.id < b.id ? -1 : 1));
   const lines = [cols.join(";")];
   for (const e of sorted) {
@@ -198,6 +219,7 @@ export function exportEntriesToCSV(entries, { filename = "alpha-history.csv", he
         e.id,
         Number(e.delivered) || 0,
         Number(e.returns) || 0,
+        entryIncome(e, rateOverride).toFixed(2),
         (Number(e.tips) || 0).toFixed(2),
         (rateOverride != null ? Number(rateOverride) : Number(e.rate)).toFixed(2),
         entryEarnings(e, rateOverride).toFixed(2),
@@ -215,15 +237,30 @@ export function exportEntriesToCSV(entries, { filename = "alpha-history.csv", he
   URL.revokeObjectURL(url);
 }
 
+// Ссылка на Google Maps по координатам — используется, чтобы показать, где
+// сотрудник завершил маршрут (см. функцию "Доп. сведения" / завершение тура).
+export function mapsLink(lat, lng) {
+  return `https://www.google.com/maps?q=${lat},${lng}`;
+}
+
+// Короткое время из ISO-строки, например "18:42"
+export function formatTimeShort(isoStr) {
+  if (!isoStr) return "";
+  const d = new Date(isoStr);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+}
+
 // Агрегирует посылки/возвраты по дню недели (0=Вс..6=Сб) для набора записей.
 // Возвращает массив длиной 7, начиная с понедельника: [{ dow, delivered, returns, days }]
 export function aggregateByWeekday(entries) {
-  const buckets = Array.from({ length: 7 }, () => ({ delivered: 0, returns: 0, days: 0 }));
+  const buckets = Array.from({ length: 7 }, () => ({ delivered: 0, returns: 0, tips: 0, days: 0 }));
   for (const e of entries) {
     const [y, m, d] = e.id.split("-").map(Number);
     const dow = new Date(y, m - 1, d).getDay(); // 0 = Sunday
     buckets[dow].delivered += Number(e.delivered) || 0;
     buckets[dow].returns += Number(e.returns) || 0;
+    buckets[dow].tips += Number(e.tips) || 0;
     buckets[dow].days += 1;
   }
   // Переставляем так, чтобы понедельник был первым

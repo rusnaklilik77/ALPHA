@@ -102,6 +102,12 @@ export function TrendChart({ entries }) {
   const innerH = H - padT - padB;
 
   const maxVal = Math.max(1, ...sorted.map((e) => Math.max(Number(e.delivered) || 0, Number(e.returns) || 0)));
+  // Чаевые — деньги, а не штуки посылок, и по сумме обычно НАМНОГО меньше
+  // count-показателей. Чтобы линия чаевых не сливалась в плоскую полоску
+  // внизу графика, она отрисовывается по СВОЕЙ собственной шкале (свой
+  // maxTips), просто на тех же координатах — так видно форму динамики
+  // чаевых по дням, а не только сравнение с посылками.
+  const maxTips = Math.max(0.01, ...sorted.map((e) => Number(e.tips) || 0));
   const stepX = sorted.length > 1 ? innerW / (sorted.length - 1) : 0;
 
   function xAt(i) {
@@ -110,10 +116,18 @@ export function TrendChart({ entries }) {
   function yAt(v) {
     return padT + innerH - (v / maxVal) * innerH;
   }
+  function yAtTips(v) {
+    return padT + innerH - (v / maxTips) * innerH;
+  }
 
   function pathFor(key) {
     return sorted
       .map((e, i) => `${i === 0 ? "M" : "L"}${xAt(i).toFixed(1)},${yAt(Number(e[key]) || 0).toFixed(1)}`)
+      .join(" ");
+  }
+  function pathForTips() {
+    return sorted
+      .map((e, i) => `${i === 0 ? "M" : "L"}${xAt(i).toFixed(1)},${yAtTips(Number(e.tips) || 0).toFixed(1)}`)
       .join(" ");
   }
 
@@ -147,11 +161,14 @@ export function TrendChart({ entries }) {
         <path d={pathFor("returns")} fill="none" stroke="#ef4444" strokeWidth="2" opacity="0.9" />
         {/* линия посылок (зелёная) */}
         <path d={pathFor("delivered")} fill="none" stroke="#22c55e" strokeWidth="2.5" />
+        {/* линия чаевых (жёлтая) — своя шкала, см. maxTips выше */}
+        <path d={pathForTips()} fill="none" stroke="#eab308" strokeWidth="2" strokeDasharray="4 3" />
 
         {sorted.map((e, i) => (
           <g key={e.id}>
             <circle cx={xAt(i)} cy={yAt(Number(e.delivered) || 0)} r="3" fill="#22c55e" />
             <circle cx={xAt(i)} cy={yAt(Number(e.returns) || 0)} r="2.5" fill="#ef4444" />
+            <circle cx={xAt(i)} cy={yAtTips(Number(e.tips) || 0)} r="2.5" fill="#eab308" />
             {i % labelEvery === 0 && (
               <text x={xAt(i)} y={H - 8} fill="#8b98a9" fontSize="9" textAnchor="middle">
                 {e.id.slice(8, 10)}
@@ -160,12 +177,15 @@ export function TrendChart({ entries }) {
           </g>
         ))}
       </svg>
-      <div className="flex items-center gap-4 mt-2 text-xs text-muted">
+      <div className="flex items-center gap-4 mt-2 text-xs text-muted flex-wrap">
         <span className="flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded-full bg-accent2 inline-block" /> {t.dashboard.charts.deliveredLegend}
         </span>
         <span className="flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded-full bg-danger inline-block" /> {t.dashboard.charts.returnsLegend}
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-2.5 h-2.5 rounded-full bg-[#eab308] inline-block" /> {t.dashboard.charts.tipsLegend}
         </span>
       </div>
     </div>
@@ -174,8 +194,9 @@ export function TrendChart({ entries }) {
 
 // ---------- Столбчатый график: среднее по дням недели ----------
 
-export function WeekdayBarChart({ buckets, metric, color, title }) {
+export function WeekdayBarChart({ buckets, metric, color, title, formatValue }) {
   const { t, weekdaysMonFirst } = useLanguage();
+  const fmt = formatValue || ((v) => (v >= 10 ? Math.round(v) : v.toFixed(1)));
 
   const active = buckets.filter((b) => b.days > 0);
   if (active.length < 2) {
@@ -222,7 +243,7 @@ export function WeekdayBarChart({ buckets, metric, color, title }) {
               <rect x={x} y={y} width={barW} height={Math.max(h, b.days > 0 ? 2 : 0)} rx="4" fill={fill} />
               {b.days > 0 && (
                 <text x={x + barW / 2} y={y - 4} fill="#e5e7eb" fontSize="9" textAnchor="middle">
-                  {avg >= 10 ? Math.round(avg) : avg.toFixed(1)}
+                  {fmt(avg)}
                 </text>
               )}
               <text x={x + barW / 2} y={H - 6} fill="#8b98a9" fontSize="9" textAnchor="middle">
