@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useLanguage } from "../context/LanguageContext";
 
-export default function RateModal({ currentRate, onSave, onClose }) {
+export default function RateModal({ currentRate, role = "privat", onSave, onClose }) {
   const { t } = useLanguage();
   const [rate, setRate] = useState(currentRate);
   const [busy, setBusy] = useState(false);
@@ -20,15 +20,16 @@ export default function RateModal({ currentRate, onSave, onClose }) {
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center px-4 z-50">
       <div className="bg-panel border border-border rounded-xl2 shadow-card p-6 w-full max-w-sm">
-        <h3 className="text-white font-bold text-lg mb-1">{t.rateModal.title}</h3>
-        <p className="text-muted text-sm mb-5">{t.rateModal.description}</p>
+        <h3 className="text-white font-bold text-lg mb-1">{t.rateModal.titleFor(role)}</h3>
+        <p className="text-muted text-sm mb-5">{t.rateModal.descriptionFor(role)}</p>
         <form onSubmit={handleSave}>
-          <label className="block text-xs font-medium text-muted mb-1.5">{t.rateModal.label}</label>
+          <label className="block text-xs font-medium text-muted mb-1.5">{t.rateModal.labelFor(role)}</label>
           <input
             type="number"
             step="0.01"
             min="0"
             required
+            autoFocus
             value={rate}
             onChange={(e) => setRate(e.target.value)}
             className="w-full bg-panel2 border border-border rounded-lg px-3 py-2.5 text-white outline-none focus:border-accent transition mb-5"

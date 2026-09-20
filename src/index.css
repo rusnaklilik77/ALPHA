@@ -35,3 +35,235 @@
     display: none;
   }
 }
+
+/* ---------- Заставка (Splash): логотип-лев на весь экран ---------- */
+.alpha-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: #000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  transition: opacity 0.5s ease, transform 0.5s ease;
+}
+.alpha-splash--leaving {
+  opacity: 0;
+  transform: scale(1.06);
+  pointer-events: none;
+}
+.alpha-splash__glow {
+  position: absolute;
+  width: min(90vw, 620px);
+  height: min(90vw, 620px);
+  border-radius: 9999px;
+  background: radial-gradient(circle, rgba(15, 184, 171, 0.32) 0%, rgba(15, 184, 171, 0) 68%);
+  opacity: 0;
+  animation: alpha-glow 2.2s ease-out 0.2s forwards, alpha-glow-pulse 2.4s ease-in-out 1.4s infinite;
+}
+.alpha-splash__stack {
+  position: relative;
+  width: min(62vw, 300px);
+  height: min(62vw, 300px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.alpha-splash__logo {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  opacity: 0;
+  transform: scale(0.72);
+  filter: blur(8px);
+  /* Фото логотипа — на чёрном фоне. screen делает чёрный «прозрачным», чтобы
+     свечение за львом не обрезалось квадратом картинки. */
+  mix-blend-mode: screen;
+  animation: alpha-logo-in 1s cubic-bezier(0.2, 0.8, 0.2, 1) 0.15s forwards;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.alpha-splash__ring {
+  position: absolute;
+  inset: -6%;
+  border-radius: 9999px;
+  border: 2px solid rgba(15, 184, 171, 0.55);
+  opacity: 0;
+  transform: scale(0.6);
+  animation: alpha-ring 1.6s ease-out 0.45s forwards;
+}
+.alpha-splash__title {
+  margin-top: 1.5rem;
+  color: #fff;
+  font-weight: 800;
+  font-size: 1.6rem;
+  letter-spacing: 0.7em;
+  padding-left: 0.7em; /* компенсируем letter-spacing, чтобы слово стояло по центру */
+  opacity: 0;
+  transform: translateY(10px);
+  animation: alpha-title-in 0.8s ease-out 0.9s forwards;
+}
+.alpha-splash__bar {
+  margin-top: 1.75rem;
+  width: 140px;
+  height: 3px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+  opacity: 0;
+  animation: alpha-title-in 0.5s ease-out 1.1s forwards;
+}
+.alpha-splash__bar > span {
+  display: block;
+  height: 100%;
+  width: 40%;
+  border-radius: 9999px;
+  background: #0fb8ab;
+  animation: alpha-bar 1.1s ease-in-out 1.1s infinite;
+}
+@keyframes alpha-logo-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.72);
+    filter: blur(8px);
+  }
+  60% {
+    opacity: 1;
+    filter: blur(0);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+    filter: blur(0);
+  }
+}
+@keyframes alpha-ring {
+  0% {
+    opacity: 0.9;
+    transform: scale(0.6);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.55);
+  }
+}
+@keyframes alpha-glow {
+  to {
+    opacity: 1;
+  }
+}
+@keyframes alpha-glow-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.08);
+  }
+}
+@keyframes alpha-title-in {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes alpha-bar {
+  0% {
+    transform: translateX(-110%);
+  }
+  100% {
+    transform: translateX(350%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .alpha-splash__logo,
+  .alpha-splash__ring,
+  .alpha-splash__glow,
+  .alpha-splash__title,
+  .alpha-splash__bar,
+  .alpha-splash__bar > span {
+    animation-duration: 0.3s !important;
+    animation-delay: 0s !important;
+    animation-iteration-count: 1 !important;
+  }
+  .alpha-splash__logo {
+    transform: none;
+    filter: none;
+  }
+}
+
+/* ---------- Карта маршрута (Leaflet) ---------- */
+.alpha-pin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9999px;
+  border: 3px solid #fff;
+  color: #fff;
+  font-weight: 800;
+  font-size: 13px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.55);
+}
+.alpha-pin--start {
+  background: #22c55e;
+}
+.alpha-pin--finish {
+  background: #ef4444;
+}
+.alpha-pin--now {
+  background: #0fb8ab;
+  animation: alpha-pin-pulse 1.6s ease-in-out infinite;
+}
+@keyframes alpha-pin-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(15, 184, 171, 0.7);
+  }
+  100% {
+    box-shadow: 0 0 0 16px rgba(15, 184, 171, 0);
+  }
+}
+.leaflet-container {
+  background: #0d1e22;
+  font-family: inherit;
+}
+.alpha-tip.leaflet-tooltip {
+  background: #071316;
+  border: 1px solid #1c363c;
+  color: #fff;
+  font-weight: 700;
+  font-size: 11px;
+  padding: 2px 8px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+}
+.alpha-tip.leaflet-tooltip-top::before {
+  border-top-color: #1c363c;
+}
+
+/* ---------- SOS ---------- */
+@keyframes alpha-sos-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.65);
+  }
+  100% {
+    box-shadow: 0 0 0 22px rgba(239, 68, 68, 0);
+  }
+}
+.alpha-sos-pulse {
+  animation: alpha-sos-ring 1.4s ease-out infinite;
+}
+@keyframes alpha-sos-flash {
+  0%,
+  100% {
+    background-color: rgba(127, 29, 29, 0.96);
+  }
+  50% {
+    background-color: rgba(185, 28, 28, 0.96);
+  }
+}
+.alpha-sos-flash {
+  animation: alpha-sos-flash 0.9s ease-in-out infinite;
+}

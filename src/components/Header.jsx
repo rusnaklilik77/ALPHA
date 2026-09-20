@@ -2,6 +2,19 @@ import { useEffect, useRef, useState } from "react";
 import { useLanguage } from "../context/LanguageContext";
 import lionLogo from "../assets/lion-logo.png";
 
+// Кнопка ставки: у каждой роли своя единица — € за посылку / за день / за час.
+function rateLabel(t, role, rate) {
+  const r = Number(rate).toFixed(2);
+  if (role === "driver") return t.header.rateDay(r);
+  if (role === "sorter") return t.header.rateHour(r);
+  return t.header.rate(r);
+}
+function rateTitle(t, role) {
+  if (role === "driver") return t.header.rateDayTitle;
+  if (role === "sorter") return t.header.rateHourTitle;
+  return t.header.rateTitle;
+}
+
 export default function Header({
   userName,
   rate,
@@ -103,9 +116,9 @@ export default function Header({
             <button
               onClick={onOpenRate}
               className="text-xs sm:text-sm font-semibold bg-panel2 hover:bg-panel border border-border rounded-lg px-3 py-2 text-white transition"
-              title={t.header.rateTitle}
+              title={rateTitle(t, role)}
             >
-              {t.header.rate(Number(rate).toFixed(2))}
+              {rateLabel(t, role, rate)}
             </button>
           )}
           {onOpenScanner && (
@@ -204,9 +217,9 @@ export default function Header({
                   setMenuOpen(false);
                 }}
                 className="w-full text-left text-sm font-semibold bg-panel2 hover:bg-panel border border-border rounded-lg px-3 py-2.5 text-white transition"
-                title={t.header.rateTitle}
+                title={rateTitle(t, role)}
               >
-                {t.header.rate(Number(rate).toFixed(2))}
+                {rateLabel(t, role, rate)}
               </button>
             )}
             {onOpenScanner && (

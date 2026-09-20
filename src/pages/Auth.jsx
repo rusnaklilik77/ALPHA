@@ -3,6 +3,7 @@ import { useAuth } from "../context/AuthContext";
 import { useLanguage } from "../context/LanguageContext";
 import PasswordInput from "../components/PasswordInput";
 import lionLogo from "../assets/lion-logo.png";
+import { isValidPhone } from "../lib/data";
 
 export default function Auth() {
   const { login, register } = useAuth();
@@ -10,7 +11,8 @@ export default function Auth() {
   const [mode, setMode] = useState("login"); // login | register
   const [name, setName] = useState("");
   const [employeeId, setEmployeeId] = useState("");
-  const [role, setRole] = useState("privat"); // privat | shop
+  const [phone, setPhone] = useState("");
+  const [role, setRole] = useState("privat"); // privat | shop | driver | sorter
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -20,15 +22,26 @@ export default function Auth() {
     return t.auth.errors[code] || t.auth.errors.default;
   }
 
+  const ROLE_OPTIONS = [
+    { key: "privat", title: t.auth.rolePrivat, desc: t.auth.rolePrivatDesc },
+    { key: "shop", title: t.auth.roleShop, desc: t.auth.roleShopDesc },
+    { key: "driver", title: t.auth.roleDriver, desc: t.auth.roleDriverDesc },
+    { key: "sorter", title: t.auth.roleSorter, desc: t.auth.roleSorterDesc },
+  ];
+
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
+    if (mode === "register" && !isValidPhone(phone)) {
+      setError(t.auth.errors.phoneInvalid);
+      return;
+    }
     setBusy(true);
     try {
       if (mode === "login") {
         await login(email, password);
       } else {
-        await register(name, email, password, employeeId, role);
+        await register(name, email, password, employeeId, role, phone);
       }
     } catch (err) {
       setError(friendlyError(err.code));
@@ -116,32 +129,38 @@ export default function Auth() {
             )}
             {mode === "register" && (
               <div>
+                <label className="block text-xs font-medium text-muted mb-1.5">{t.auth.phone}</label>
+                <input
+                  type="tel"
+                  inputMode="tel"
+                  required
+                  autoComplete="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  className="w-full bg-panel2 border border-border rounded-lg px-3 py-2.5 text-white placeholder:text-muted/60 outline-none focus:border-accent transition"
+                  placeholder={t.auth.phonePlaceholder}
+                />
+              </div>
+            )}
+            {mode === "register" && (
+              <div>
                 <label className="block text-xs font-medium text-muted mb-1.5">{t.auth.roleTitle}</label>
                 <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setRole("privat")}
-                    className={`text-left rounded-lg border px-3 py-2.5 transition ${
-                      role === "privat"
-                        ? "bg-accent/15 border-accent text-white"
-                        : "bg-panel2 border-border text-muted hover:text-white"
-                    }`}
-                  >
-                    <div className="text-sm font-semibold">{t.auth.rolePrivat}</div>
-                    <div className="text-[11px] mt-0.5 opacity-80">{t.auth.rolePrivatDesc}</div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setRole("shop")}
-                    className={`text-left rounded-lg border px-3 py-2.5 transition ${
-                      role === "shop"
-                        ? "bg-accent/15 border-accent text-white"
-                        : "bg-panel2 border-border text-muted hover:text-white"
-                    }`}
-                  >
-                    <div className="text-sm font-semibold">{t.auth.roleShop}</div>
-                    <div className="text-[11px] mt-0.5 opacity-80">{t.auth.roleShopDesc}</div>
-                  </button>
+                  {ROLE_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.key}
+                      type="button"
+                      onClick={() => setRole(opt.key)}
+                      className={`text-left rounded-lg border px-3 py-2.5 transition ${
+                        role === opt.key
+                          ? "bg-accent/15 border-accent text-white"
+                          : "bg-panel2 border-border text-muted hover:text-white"
+                      }`}
+                    >
+                      <div className="text-sm font-semibold">{opt.title}</div>
+                      <div className="text-[11px] mt-0.5 opacity-80">{opt.desc}</div>
+                    </button>
+                  ))}
                 </div>
               </div>
             )}

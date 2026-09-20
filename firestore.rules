@@ -38,6 +38,28 @@ service cloud.firestore {
         allow write: if request.auth != null && request.auth.uid == userId;
       }
 
+      // Туры (GPS-маршруты): пишет и удаляет только сам сотрудник, читает он
+      // сам и админ (для просмотра маршрутов сотрудника в режиме админа).
+      match /tours/{tourId} {
+        allow read: if request.auth != null && (request.auth.uid == userId || isAdmin());
+        allow write: if request.auth != null && request.auth.uid == userId;
+      }
+
+      // «Почтовый ящик» входящих SOS. Документ = uid ОТПРАВИТЕЛЯ, поэтому
+      // повторное нажатие SOS перезаписывает тот же документ, а не плодит дубли.
+      //  - читать ящик может только его владелец (получатель);
+      //  - создать/обновить сигнал может любой вошедший пользователь, но только
+      //    от своего имени (fromUid обязан совпадать с его uid и с id документа);
+      //  - удалить может получатель («Понятно») или сам отправитель («Отменить SOS»).
+      match /sosInbox/{fromUid} {
+        allow read: if request.auth != null && request.auth.uid == userId;
+        allow create, update: if request.auth != null
+          && request.auth.uid == fromUid
+          && request.resource.data.fromUid == request.auth.uid;
+        allow delete: if request.auth != null
+          && (request.auth.uid == userId || request.auth.uid == fromUid);
+      }
+
       match /entries/{entryId} {
         // Свои записи о доставках видит владелец, чужие — только админ
         // (для экрана статистики сотрудника).

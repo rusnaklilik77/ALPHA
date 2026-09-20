@@ -4,9 +4,10 @@ import {
   subscribeAllUsersAdmin,
   subscribeEntriesAdmin,
   subscribeMonthlyPay,
+  subscribeTours,
   adminLogout,
+  normalizeRole,
   DEFAULT_RATE,
-  DEFAULT_ROLE,
 } from "../lib/data";
 import {
   totals,
@@ -16,12 +17,15 @@ import {
   entriesForMonth,
   currentMonthKey,
   monthlyBreakdown,
+  formatHours,
 } from "../lib/utils";
 import StatCard from "../components/StatCard";
 import EntryList from "../components/EntryList";
 import MonthTabs from "../components/MonthTabs";
 import Leaderboard from "../components/Leaderboard";
-import { TrendChart, DonutChart } from "../components/Charts";
+import ToursList from "../components/ToursList";
+import RouteMapModal from "../components/RouteMapModal";
+import { TrendChart, DonutChart, DailyBarChart } from "../components/Charts";
 
 // Режим администратора: список всех зарегистрированных сотрудников (по
 // документам users/*) с поиском по имени/ID, и статистика выбранного
@@ -39,6 +43,8 @@ export default function AdminPanel({ currentUid, onClose }) {
   const [selected, setSelected] = useState(null);
   const [entries, setEntries] = useState([]);
   const [selectedMonthlyPay, setSelectedMonthlyPay] = useState({});
+  const [selectedTours, setSelectedTours] = useState([]);
+  const [routeView, setRouteView] = useState(null);
   const [loadingEntries, setLoadingEntries] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState(currentMonthKey());
 
@@ -53,6 +59,7 @@ export default function AdminPanel({ currentUid, onClose }) {
   useEffect(() => {
     if (!selected) {
       setEntries([]);
+      setSelectedTours([]);
       return;
     }
     setLoadingEntries(true);
@@ -62,9 +69,11 @@ export default function AdminPanel({ currentUid, onClose }) {
       setLoadingEntries(false);
     });
     const unsubPay = subscribeMonthlyPay(selected.uid, setSelectedMonthlyPay);
+    const unsubTours = subscribeTours(selected.uid, setSelectedTours);
     return () => {
       unsub();
       unsubPay();
+      unsubTours();
     };
   }, [selected]);
 
@@ -81,12 +90,16 @@ export default function AdminPanel({ currentUid, onClose }) {
     return employees.filter((e) => {
       const name = (e.name || "").toLowerCase();
       const id = String(e.employeeId || "").toLowerCase();
-      return name.includes(q) || id.includes(q);
+      const phone = String(e.phone || "").toLowerCase();
+      return name.includes(q) || id.includes(q) || phone.includes(q);
     });
   }, [employees, query]);
 
   const selectedRate = selected ? Number(selected.rate ?? DEFAULT_RATE) : DEFAULT_RATE;
-  const selectedRole = selected ? (selected.role === "shop" ? "shop" : DEFAULT_ROLE) : DEFAULT_ROLE;
+  const selectedRole = normalizeRole(selected?.role);
+  const isSelectedDriver = selectedRole === "driver";
+  const isSelectedSorter = selectedRole === "sorter";
+  const isSelectedParcel = !isSelectedDriver && !isSelectedSorter;
 
   // Список месяцев, за которые у сотрудника есть записи (плюс текущий) — та же
   // логика, что и в обычном дашборде, теперь доступна и админу: можно
@@ -101,9 +114,9 @@ export default function AdminPanel({ currentUid, onClose }) {
   }, [months]);
   const monthEntries = useMemo(() => entriesForMonth(entries, selectedMonth), [entries, selectedMonth]);
   const monthLabel = formatMonthLabel(selectedMonth, lang);
-  const monthStatsRaw = useMemo(() => totals(monthEntries, selectedRate), [monthEntries, selectedRate]);
-  const allTimeStatsRaw = useMemo(() => totals(entries, selectedRate), [entries, selectedRate]);
-  const breakdownRaw = useMemo(() => monthlyBreakdown(entries, selectedRate), [entries, selectedRate]);
+  const monthStatsRaw = useMemo(() => totals(monthEntries, selectedRate, selectedRole), [monthEntries, selectedRate, selectedRole]);
+  const allTimeStatsRaw = useMemo(() => totals(entries, selectedRate, selectedRole), [entries, selectedRate, selectedRole]);
+  const breakdownRaw = useMemo(() => monthlyBreakdown(entries, selectedRate, selectedRole), [entries, selectedRate, selectedRole]);
 
   // Как и на дашборде сотрудника: для роли "Шоп" заработок — это сумма,
   // введённая самим сотрудником за месяц, а не посылки × ставка.
@@ -124,6 +137,33 @@ export default function AdminPanel({ currentUid, onClose }) {
   const breakdown = isSelectedShop
     ? breakdownRaw.map((m) => ({ ...m, income: Number(selectedMonthlyPay[m.key]) || 0, earnings: (Number(selectedMonthlyPay[m.key]) || 0) + m.tips }))
     : breakdownRaw;
+
+  // Набор карточек статистики зависит от роли выбранного сотрудника.
+  function statCards(stats) {
+    if (isSelectedDriver) {
+      return [
+        { label: t.admin.earnings, value: formatEuro(stats.income), color: "text-white", icon: "💶" },
+        { label: t.admin.workedDays, value: stats.days, color: "text-accent2", icon: "✅" },
+        { label: t.admin.rateDay, value: formatEuro(selectedRate), color: "text-accent", icon: "💵" },
+      ];
+    }
+    if (isSelectedSorter) {
+      return [
+        { label: t.admin.earnings, value: formatEuro(stats.income), color: "text-white", icon: "💶" },
+        { label: t.admin.hoursTotal, value: formatHours(stats.hours), color: "text-accent2", icon: "⏱" },
+        { label: t.admin.workDays, value: stats.days, color: "text-white", icon: "📅" },
+        { label: t.admin.rateHour, value: formatEuro(selectedRate), color: "text-accent", icon: "💵" },
+      ];
+    }
+    return [
+      { label: t.admin.earnings, value: formatEuro(stats.income), color: "text-white", icon: "💶" },
+      { label: t.admin.delivered, value: stats.delivered, color: "text-accent2", icon: "📦" },
+      { label: t.admin.returns, value: stats.returns, color: "text-danger", icon: "↩️" },
+      { label: t.admin.tips, value: formatEuro(stats.tips), color: "text-accent", icon: "🎁" },
+      { label: t.admin.workDays, value: stats.days, color: "text-white", icon: "📅" },
+    ];
+  }
+  const statGridCls = isSelectedParcel ? "grid grid-cols-2 lg:grid-cols-5 gap-4" : "grid grid-cols-2 lg:grid-cols-4 gap-4";
 
   return (
     <div className="min-h-screen bg-bg pb-16">
@@ -205,8 +245,9 @@ export default function AdminPanel({ currentUid, onClose }) {
                           </span>
                         )}
                       </div>
-                      <div className="text-muted text-xs">
-                        {t.admin.idLabel}: {emp.employeeId || "—"}
+                      <div className="text-muted text-xs truncate">
+                        {t.admin.idLabel}: {emp.employeeId || "—"} · {t.admin.roleLabel(normalizeRole(emp.role))}
+                        {emp.phone ? ` · ${emp.phone}` : ""}
                       </div>
                     </div>
                     <span className="text-muted text-lg shrink-0">→</span>
@@ -235,6 +276,14 @@ export default function AdminPanel({ currentUid, onClose }) {
                 <div className="text-muted text-sm">
                   {t.admin.idLabel}: {selected.employeeId || "—"}
                 </div>
+                {selected.phone ? (
+                  <a
+                    href={`tel:${String(selected.phone).replace(/[^\d+]/g, "")}`}
+                    className="text-accent text-sm font-semibold hover:underline"
+                  >
+                    📞 {selected.phone}
+                  </a>
+                ) : null}
               </div>
               <div className="text-right">
                 {isSelectedShop ? (
@@ -246,7 +295,9 @@ export default function AdminPanel({ currentUid, onClose }) {
                   </>
                 ) : (
                   <>
-                    <div className="text-muted text-xs uppercase tracking-wide">{t.admin.rate}</div>
+                    <div className="text-muted text-xs uppercase tracking-wide">
+                      {isSelectedDriver ? t.admin.rateDay : isSelectedSorter ? t.admin.rateHour : t.admin.rate}
+                    </div>
                     <div className="text-accent font-bold text-lg">
                       {Number(selected.rate ?? DEFAULT_RATE).toFixed(2)} €
                     </div>
@@ -264,37 +315,10 @@ export default function AdminPanel({ currentUid, onClose }) {
                 {/* Общий итог за всё время — не зависит от выбранной вкладки месяца ниже */}
                 <div>
                   <h2 className="text-white font-bold text-lg mb-3">{t.admin.allTime}</h2>
-                  <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-                    <StatCard
-                      label={t.admin.earnings}
-                      value={formatEuro(allTimeStats.income)}
-                      valueColor="text-white"
-                      icon="💶"
-                    />
-                    <StatCard
-                      label={t.admin.delivered}
-                      value={allTimeStats.delivered}
-                      valueColor="text-accent2"
-                      icon="📦"
-                    />
-                    <StatCard
-                      label={t.admin.returns}
-                      value={allTimeStats.returns}
-                      valueColor="text-danger"
-                      icon="↩️"
-                    />
-                    <StatCard
-                      label={t.admin.tips}
-                      value={formatEuro(allTimeStats.tips)}
-                      valueColor="text-accent"
-                      icon="🎁"
-                    />
-                    <StatCard
-                      label={t.admin.workDays}
-                      value={allTimeStats.days}
-                      valueColor="text-white"
-                      icon="📅"
-                    />
+                  <div className={statGridCls}>
+                    {statCards(allTimeStats).map((c) => (
+                      <StatCard key={c.label} label={c.label} value={c.value} valueColor={c.color} icon={c.icon} />
+                    ))}
                   </div>
                 </div>
 
@@ -319,10 +343,25 @@ export default function AdminPanel({ currentUid, onClose }) {
                               {formatMonthLabel(m.key, lang)}
                             </div>
                             <div className="text-muted text-xs mt-0.5">
-                              📦 <span className="text-accent2 font-semibold">{m.delivered}</span> · 🎁{" "}
-                              <span className="text-accent font-semibold">{formatEuro(m.tips)}</span> · ↩️{" "}
-                              <span className="text-danger font-semibold">{m.returns}</span> · 📅{" "}
-                              <span className="text-white font-semibold">{m.days}</span>
+                              {isSelectedParcel && (
+                                <>
+                                  📦 <span className="text-accent2 font-semibold">{m.delivered}</span> · 🎁{" "}
+                                  <span className="text-accent font-semibold">{formatEuro(m.tips)}</span> · ↩️{" "}
+                                  <span className="text-danger font-semibold">{m.returns}</span> · 📅{" "}
+                                  <span className="text-white font-semibold">{m.days}</span>
+                                </>
+                              )}
+                              {isSelectedDriver && (
+                                <>
+                                  ✅ <span className="text-accent2 font-semibold">{m.days}</span>
+                                </>
+                              )}
+                              {isSelectedSorter && (
+                                <>
+                                  ⏱ <span className="text-accent2 font-semibold">{formatHours(m.hours)}</span> · 📅{" "}
+                                  <span className="text-white font-semibold">{m.days}</span>
+                                </>
+                              )}
                             </div>
                           </div>
                           <div className="text-white font-bold text-base shrink-0">{formatEuro(m.income)}</div>
@@ -334,53 +373,47 @@ export default function AdminPanel({ currentUid, onClose }) {
 
                 <MonthTabs months={months} selected={selectedMonth} onSelect={setSelectedMonth} />
 
-                <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-                  <StatCard
-                    label={t.admin.earnings}
-                    value={formatEuro(monthStats.income)}
-                    valueColor="text-white"
-                    icon="💶"
-                  />
-                  <StatCard
-                    label={t.admin.delivered}
-                    value={monthStats.delivered}
-                    valueColor="text-accent2"
-                    icon="📦"
-                  />
-                  <StatCard
-                    label={t.admin.returns}
-                    value={monthStats.returns}
-                    valueColor="text-danger"
-                    icon="↩️"
-                  />
-                  <StatCard
-                    label={t.admin.tips}
-                    value={formatEuro(monthStats.tips)}
-                    valueColor="text-accent"
-                    icon="🎁"
-                  />
-                  <StatCard
-                    label={t.admin.workDays}
-                    value={monthStats.days}
-                    valueColor="text-white"
-                    icon="📅"
-                  />
+                <div className={statGridCls}>
+                  {statCards(monthStats).map((c) => (
+                    <StatCard key={c.label} label={c.label} value={c.value} valueColor={c.color} icon={c.icon} />
+                  ))}
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {isSelectedParcel && (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div className="bg-panel border border-border rounded-xl2 shadow-card p-5">
+                      <h4 className="text-white font-semibold text-sm mb-2">
+                        {t.dashboard.charts.deliveredTrend}
+                      </h4>
+                      <TrendChart entries={monthEntries} />
+                    </div>
+                    <div className="bg-panel border border-border rounded-xl2 shadow-card p-5 flex flex-col items-center">
+                      <h4 className="text-white font-semibold text-sm mb-2 self-start">
+                        {t.dashboard.charts.donutTitle(monthLabel)}
+                      </h4>
+                      <DonutChart delivered={monthStats.delivered} returns={monthStats.returns} />
+                    </div>
+                  </div>
+                )}
+                {isSelectedSorter && (
                   <div className="bg-panel border border-border rounded-xl2 shadow-card p-5">
-                    <h4 className="text-white font-semibold text-sm mb-2">
-                      {t.dashboard.charts.deliveredTrend}
-                    </h4>
-                    <TrendChart entries={monthEntries} />
+                    <DailyBarChart entries={monthEntries} metric="hours" title={t.dashboard.charts.hoursTrend} />
                   </div>
-                  <div className="bg-panel border border-border rounded-xl2 shadow-card p-5 flex flex-col items-center">
-                    <h4 className="text-white font-semibold text-sm mb-2 self-start">
-                      {t.dashboard.charts.donutTitle(monthLabel)}
-                    </h4>
-                    <DonutChart delivered={monthStats.delivered} returns={monthStats.returns} />
+                )}
+
+                {/* Записанные туры сотрудника (GPS-маршруты) — можно открыть карту со стартом и финишем */}
+                {!isSelectedSorter && (
+                  <div>
+                    <h2 className="text-white font-bold text-lg mb-3">{t.admin.routesTitle}</h2>
+                    <div className="bg-panel border border-border rounded-xl2 shadow-card p-4">
+                      <ToursList
+                        tours={selectedTours}
+                        onShow={(tour) => setRouteView(tour)}
+                        emptyMessage={t.admin.routesEmpty}
+                      />
+                    </div>
                   </div>
-                </div>
+                )}
 
                 <div>
                   <h2 className="text-white font-bold text-lg mb-3">
@@ -399,6 +432,8 @@ export default function AdminPanel({ currentUid, onClose }) {
           </>
         )}
       </main>
+
+      {routeView && <RouteMapModal tour={routeView} onClose={() => setRouteView(null)} />}
     </div>
   );
 }

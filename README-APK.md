@@ -62,3 +62,17 @@ keytool -genkey -v -keystore alpha-release.keystore -alias alpha -keyalg RSA -ke
 соберите `./gradlew assembleRelease`. Если понадобится — могу подготовить
 готовый `build.gradle` с секцией подписи и вторым workflow для релизной
 сборки.
+
+## Запись маршрута в фоне (для туров)
+
+В обычном браузере и в Capacitor-WebView GPS перестаёт писаться, когда экран выключен.
+Чтобы маршрут тура записывался и с выключенным экраном, добавьте нативный плагин, например:
+
+```bash
+npm install @capacitor-community/background-geolocation
+npx cap sync android
+```
+
+и в `AndroidManifest.xml` разрешения `ACCESS_FINE_LOCATION`, `ACCESS_BACKGROUND_LOCATION`,
+`FOREGROUND_SERVICE_LOCATION`. Затем плагин нужно подключить в `src/context/TourContext.jsx`
+вместо `navigator.geolocation.watchPosition`.

@@ -1,7 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLanguage } from "../context/LanguageContext";
 import { subscribeMonthStatsAllUsers } from "../lib/data";
-import { formatMonthLabel, monthsSinceStart, currentMonthKey } from "../lib/utils";
+import { formatMonthLabel, monthsSinceStart, currentMonthKey, formatHours } from "../lib/utils";
+import { normalizeRole } from "../lib/data";
+
+// Группы рейтинга и то, по чему в них считается место:
+//   privat / shop — по отданным посылкам, driver — по отработанным дням,
+//   sorter — по отработанным часам.
+const GROUPS = [
+  { key: "privat", tab: "tabPrivat", metric: "delivered", column: "deliveredColumn" },
+  { key: "shop", tab: "tabShop", metric: "delivered", column: "deliveredColumn" },
+  { key: "driver", tab: "tabDriver", metric: "worked", column: "daysColumn" },
+  { key: "sorter", tab: "tabSorter", metric: "hours", column: "hoursColumn" },
+];
 
 // Общий рейтинг сотрудников по количеству отданных посылок за месяц —
 // отдельно для "Приват" и "Шоп", чтобы они не смешивались друг с другом (у
@@ -41,15 +52,17 @@ export default function Leaderboard({ employees, currentUid }) {
     return unsub;
   }, [month]);
 
+  const groupCfg = GROUPS.find((g) => g.key === group) || GROUPS[0];
+
   const rows = useMemo(() => {
-    const filtered = employees.filter((e) => (e.role === "shop" ? "shop" : "privat") === group);
+    const filtered = employees.filter((e) => normalizeRole(e.role) === group);
     const withStats = filtered.map((e) => {
-      const s = statsByUid.get(e.uid) || { delivered: 0, returns: 0, tips: 0 };
-      return { ...e, delivered: s.delivered, returns: s.returns, tips: s.tips };
+      const s = statsByUid.get(e.uid) || { delivered: 0, returns: 0, tips: 0, hours: 0, worked: 0 };
+      return { ...e, delivered: s.delivered, returns: s.returns, tips: s.tips, hours: s.hours, worked: s.worked };
     });
-    withStats.sort((a, b) => b.delivered - a.delivered);
+    withStats.sort((a, b) => b[groupCfg.metric] - a[groupCfg.metric]);
     return withStats;
-  }, [employees, statsByUid, group]);
+  }, [employees, statsByUid, group, groupCfg]);
 
   return (
     <div className="space-y-4">
@@ -58,26 +71,20 @@ export default function Leaderboard({ employees, currentUid }) {
         <p className="text-muted text-sm">{t.rating.description}</p>
       </div>
 
-      {/* Переключатель Приват / Шоп — раздельные рейтинги, не смешиваются */}
-      <div className="flex bg-panel2 rounded-lg p-1 max-w-xs">
-        <button
-          type="button"
-          onClick={() => setGroup("privat")}
-          className={`flex-1 py-2 rounded-md text-sm font-semibold transition ${
-            group === "privat" ? "bg-accent text-bg" : "text-muted hover:text-white"
-          }`}
-        >
-          {t.rating.tabPrivat}
-        </button>
-        <button
-          type="button"
-          onClick={() => setGroup("shop")}
-          className={`flex-1 py-2 rounded-md text-sm font-semibold transition ${
-            group === "shop" ? "bg-accent text-bg" : "text-muted hover:text-white"
-          }`}
-        >
-          {t.rating.tabShop}
-        </button>
+      {/* Переключатель групп — раздельные рейтинги, не смешиваются */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 bg-panel2 rounded-lg p-1 max-w-lg">
+        {GROUPS.map((g) => (
+          <button
+            key={g.key}
+            type="button"
+            onClick={() => setGroup(g.key)}
+            className={`py-2 px-2 rounded-md text-sm font-semibold transition truncate ${
+              group === g.key ? "bg-accent text-bg" : "text-muted hover:text-white"
+            }`}
+          >
+            {t.rating[g.tab]}
+          </button>
+        ))}
       </div>
 
       {/* Вкладки месяцев — рейтинг сохраняется помесячно, можно посмотреть,
@@ -117,8 +124,9 @@ export default function Leaderboard({ employees, currentUid }) {
       ) : (
         <div className="bg-panel border border-border rounded-xl2 shadow-card overflow-hidden divide-y divide-border">
           {rows.map((r, i) => {
-            const isFirst = i === 0 && r.delivered > 0;
-            const isLast = i === rows.length - 1 && rows.length > 1 && r.delivered < rows[0].delivered;
+            const value = r[groupCfg.metric];
+            const isFirst = i === 0 && value > 0;
+            const isLast = i === rows.length - 1 && rows.length > 1 && value < rows[0][groupCfg.metric];
             return (
               <div
                 key={r.uid}
@@ -155,8 +163,10 @@ export default function Leaderboard({ employees, currentUid }) {
                   </div>
                 </div>
                 <div className="text-right shrink-0">
-                  <div className="text-accent2 font-bold text-lg">{r.delivered}</div>
-                  <div className="text-muted text-xs">{t.rating.deliveredColumn}</div>
+                  <div className="text-accent2 font-bold text-lg">
+                    {groupCfg.metric === "hours" ? formatHours(value) : value}
+                  </div>
+                  <div className="text-muted text-xs">{t.rating[groupCfg.column]}</div>
                 </div>
               </div>
             );

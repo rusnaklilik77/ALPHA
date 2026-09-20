@@ -1,9 +1,13 @@
+import { useState } from "react";
 import { AuthProvider, useAuth } from "./context/AuthContext";
+import { TourProvider } from "./context/TourContext";
 import { LanguageProvider, useLanguage } from "./context/LanguageContext";
 import { isFirebaseConfigured } from "./firebase";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import ScanPage from "./pages/ScanPage";
+import Splash from "./components/Splash";
+import SosReceiver from "./components/SosReceiver";
 
 // Страница сканера открывается по ссылке из QR-кода ("?scan=<uid>&t=<token>")
 // и не требует входа по email/паролю — проверяем параметры адресной строки
@@ -65,14 +69,29 @@ function Gate() {
     );
   }
 
-  return user ? <Dashboard /> : <Auth />;
+  if (!user) return <Auth />;
+
+  // TourProvider (запись маршрута тура) и SosReceiver (входящие SOS) живут на
+  // уровне всего приложения, а не внутри Dashboard, — поэтому тур продолжает
+  // записываться, а SOS доходит и тогда, когда открыт режим администратора.
+  // key=uid: при смене пользователя всё состояние тура начинается заново.
+  return (
+    <TourProvider key={user.uid} uid={user.uid}>
+      <Dashboard />
+      <SosReceiver uid={user.uid} />
+    </TourProvider>
+  );
 }
 
 export default function App() {
   const scanParams = getScanParams();
+  // Заставка с логотипом на весь экран — при каждом запуске сайта/приложения.
+  // Приложение рендерится и грузится «под» ней, так что ждать ещё раз не нужно.
+  const [splashDone, setSplashDone] = useState(false);
 
   return (
     <LanguageProvider>
+      {!splashDone && <Splash onDone={() => setSplashDone(true)} />}
       {scanParams ? (
         <ScanPage uid={scanParams.uid} token={scanParams.token} />
       ) : isFirebaseConfigured ? (

@@ -270,3 +270,70 @@ export function WeekdayBarChart({ buckets, metric, color, title, formatValue }) 
     </div>
   );
 }
+
+// ---------- Столбчатый график по дням месяца (например, часы сортировщика) ----------
+export function DailyBarChart({ entries, metric = "hours", color = "#22c55e", title, formatValue }) {
+  const { t } = useLanguage();
+  const fmt = formatValue || ((v) => String(Math.round(v * 100) / 100));
+  const sorted = [...entries].filter((e) => Number(e[metric]) > 0).sort((a, b) => (a.id < b.id ? -1 : 1));
+
+  if (sorted.length < 2) {
+    return (
+      <div>
+        <h4 className="text-white font-semibold text-sm mb-2">{title}</h4>
+        <div className="text-muted text-sm py-6 text-center">{t.dashboard.charts.noData}</div>
+      </div>
+    );
+  }
+
+  const W = 640;
+  const H = 200;
+  const padL = 28;
+  const padR = 8;
+  const padT = 16;
+  const padB = 24;
+  const innerW = W - padL - padR;
+  const innerH = H - padT - padB;
+  const maxVal = Math.max(0.0001, ...sorted.map((e) => Number(e[metric]) || 0));
+  const slot = innerW / sorted.length;
+  const barW = Math.min(28, slot * 0.7);
+  const labelEvery = Math.max(1, Math.ceil(sorted.length / 12));
+
+  return (
+    <div>
+      <h4 className="text-white font-semibold text-sm mb-2">{title}</h4>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" role="img">
+        {[0, 0.5, 1].map((f) => (
+          <line key={f} x1={padL} x2={W - padR} y1={padT + innerH * (1 - f)} y2={padT + innerH * (1 - f)} stroke="#1f2937" strokeWidth="1" />
+        ))}
+        <text x={2} y={padT + 4} fill="#8b98a9" fontSize="9">
+          {fmt(maxVal)}
+        </text>
+        <text x={2} y={padT + innerH} fill="#8b98a9" fontSize="9">
+          0
+        </text>
+        {sorted.map((e, i) => {
+          const v = Number(e[metric]) || 0;
+          const h = (v / maxVal) * innerH;
+          const x = padL + i * slot + (slot - barW) / 2;
+          const y = padT + innerH - h;
+          return (
+            <g key={e.id}>
+              <rect x={x} y={y} width={barW} height={h} rx="3" fill={color} />
+              {sorted.length <= 16 && (
+                <text x={x + barW / 2} y={y - 3} fill="#e5e7eb" fontSize="9" textAnchor="middle">
+                  {fmt(v)}
+                </text>
+              )}
+              {i % labelEvery === 0 && (
+                <text x={x + barW / 2} y={H - 8} fill="#8b98a9" fontSize="9" textAnchor="middle">
+                  {e.id.slice(8, 10)}
+                </text>
+              )}
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}

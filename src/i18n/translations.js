@@ -1,4 +1,8 @@
 // Словарь переводов интерфейса. Ключи-строки и ключи-функции (для подстановки значений).
+// Строки новых функций (водитель, сортировщик, тур на карте, SOS, профиль) лежат в
+// ./extra.js и вливаются в этот словарь в самом конце файла.
+
+import { extra, deepMerge } from "./extra";
 
 export const LANGS = [
   { code: "ru", label: "Русский" },
@@ -899,3 +903,8 @@ export const dict = {
     },
   },
 };
+
+// Вливаем новые секции/строки из extra.js в основной словарь.
+for (const code of Object.keys(dict)) {
+  if (extra[code]) deepMerge(dict[code], extra[code]);
+}

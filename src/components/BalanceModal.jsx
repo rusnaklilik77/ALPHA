@@ -1,10 +1,13 @@
-import { formatEuro, formatMonthLabel } from "../lib/utils";
+import { formatEuro, formatMonthLabel, formatHours } from "../lib/utils";
 import { useLanguage } from "../context/LanguageContext";
 
 // Всплывающее окно "Общий баланс" — сводка заработка по всем месяцам сразу,
 // плюс общий итог за всё время наверху.
 export default function BalanceModal({ breakdown, grandTotal, role = "privat", onClose }) {
   const { t, lang } = useLanguage();
+  const isDriver = role === "driver";
+  const isSorter = role === "sorter";
+  const isParcel = !isDriver && !isSorter;
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center px-4 z-50">
@@ -28,19 +31,29 @@ export default function BalanceModal({ breakdown, grandTotal, role = "privat", o
           <div className="text-3xl sm:text-4xl font-black text-white tracking-tight mt-1">
             {formatEuro(grandTotal.income)}
           </div>
-          <div className="text-muted/70 text-xs mt-1">{t.balanceModal.excludesTips}</div>
+          {isParcel && <div className="text-muted/70 text-xs mt-1">{t.balanceModal.excludesTips}</div>}
           <div className="flex flex-wrap gap-x-5 gap-y-1 mt-3 text-sm text-muted">
+            {isParcel && (
+              <span>
+                📦 <span className="text-accent2 font-semibold">{grandTotal.delivered}</span>{" "}
+                {t.dashboard.deliveredLabel(role)}
+              </span>
+            )}
+            {isParcel && (
+              <span>
+                🎁 <span className="text-accent font-semibold">{formatEuro(grandTotal.tips)}</span>{" "}
+                {t.balanceModal.tips}
+              </span>
+            )}
+            {isSorter && (
+              <span>
+                ⏱ <span className="text-accent2 font-semibold">{formatHours(grandTotal.hours)}</span>{" "}
+                {t.dashboard.hoursLabel}
+              </span>
+            )}
             <span>
-              📦 <span className="text-accent2 font-semibold">{grandTotal.delivered}</span>{" "}
-              {t.dashboard.deliveredLabel(role)}
-            </span>
-            <span>
-              🎁 <span className="text-accent font-semibold">{formatEuro(grandTotal.tips)}</span>{" "}
-              {t.balanceModal.tips}
-            </span>
-            <span>
-              📅 <span className="text-white font-semibold">{grandTotal.days}</span>{" "}
-              {t.dashboard.workDays}
+              {isDriver ? "✅" : "📅"} <span className="text-white font-semibold">{grandTotal.days}</span>{" "}
+              {isDriver ? t.dashboard.workedDaysLabel : t.dashboard.workDays}
             </span>
           </div>
         </div>
@@ -60,7 +73,17 @@ export default function BalanceModal({ breakdown, grandTotal, role = "privat", o
               <div>
                 <div className="text-white font-semibold text-sm">{formatMonthLabel(m.key, lang)}</div>
                 <div className="text-muted text-xs mt-0.5">
-                  📦 {m.delivered} · 🎁 {formatEuro(m.tips)} · 📅 {m.days}
+                  {isParcel && (
+                    <>
+                      📦 {m.delivered} · 🎁 {formatEuro(m.tips)} · 📅 {m.days}
+                    </>
+                  )}
+                  {isDriver && <>✅ {m.days}</>}
+                  {isSorter && (
+                    <>
+                      ⏱ {formatHours(m.hours)} {t.dashboard.hoursShort} · 📅 {m.days}
+                    </>
+                  )}
                 </div>
               </div>
               <div className="text-white font-bold text-sm sm:text-base shrink-0">
